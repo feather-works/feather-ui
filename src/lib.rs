@@ -28,6 +28,7 @@ pub mod tinta;
 pub mod texto_contorno;
 /// Pressão da caneta (XInput2 no Linux, WM_POINTER no Windows) e diagnóstico.
 pub mod caneta;
+pub mod clique_caneta;
 pub mod acessibilidade;
 
 pub mod seletor_cor;
