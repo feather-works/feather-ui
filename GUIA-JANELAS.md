@@ -1,4 +1,4 @@
-# Guia de janelas do FeatherOffice
+# Guia de janelas do FeatherWorks
 
 Como montar uma janela (ou tela, ou diálogo) Iced na suíte sem que ela saia
 feia ou fora do padrão. Vale para FeatherSheet, FeatherDocs, FeatherSlide,

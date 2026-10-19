@@ -1,4 +1,4 @@
-//! Ajuda FeatherOffice: landing de tópicos + navegação em três grupos.
+//! Ajuda FeatherWorks: landing de tópicos + navegação em três grupos.
 //! O modelo, a busca e os eventos continuam compartilhados entre os apps;
 //! todas as cores vêm dos tokens da preferência ativa (claro/escuro/acento).
 use super::*;

@@ -1,4 +1,4 @@
-//! Componentes genéricos reutilizáveis da faixa do FeatherOffice.
+//! Componentes genéricos reutilizáveis da faixa do FeatherWorks.
 //! A mensagem e os eventos continuam sendo propriedade do aplicativo:
 //! o crate de UI nunca importa nenhum motor de documentos, planilhas ou slides.
 

@@ -1,4 +1,4 @@
-//! Contraste WCAG 2.x para componentes Iced da suíte FeatherOffice.
+//! Contraste WCAG 2.x para componentes Iced da suíte FeatherWorks.
 //!
 //! Funções puras: não consultam o tema global, não dependem de documento e
 //! podem ser testadas em paralelo, independentemente de janelas/monitor.

@@ -1,4 +1,4 @@
-//! Estilos visuais e cores que reproduzem exatamente o design da suíte FeatherOffice.
+//! Estilos visuais e cores que reproduzem exatamente o design da suíte FeatherWorks.
 
 use iced::border::Radius;
 use iced::widget::{button, container};

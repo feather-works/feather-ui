@@ -1,4 +1,4 @@
-//! Seletor HSV + alfa compartilhado pelo FeatherOffice.
+//! Seletor HSV + alfa compartilhado pelo FeatherWorks.
 //! Nasceu no FeatherSlide; não importa mensagens nem modelos de nenhum editor.
 use iced::mouse;
 use iced::widget::canvas::{self, event, gradient, Canvas, Fill, Frame, Geometry, Gradient, Path, Program, Stroke};

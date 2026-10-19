@@ -1,4 +1,4 @@
-//! Gestão de janelas auxiliares usada por todos os programas FeatherOffice.
+//! Gestão de janelas auxiliares usada por todos os programas FeatherWorks.
 //! O documento e os comandos continuam sendo responsabilidade do aplicativo.
 use iced::{window, Size, Task};
 use std::time::Instant;

@@ -1,6 +1,6 @@
 # feather-ui
 
-Biblioteca de interface compartilhada da suíte **FeatherOffice**: tema, cores,
+Biblioteca de interface compartilhada da suíte **FeatherWorks**: tema, cores,
 ícones, marca, faixa de opções (Ribbon), barra de janela, ajuda, configurações
 e os componentes visuais comuns a todos os aplicativos — FeatherSheet,
 FeatherDocs, FeatherSlide, FeatherCAD e FeatherPDF.
@@ -13,7 +13,7 @@ dentro do próprio executável. Quem instala só a planilha não precisa instala
 
 Os aplicativos são escritos em Rust com [Iced](https://iced.rs). O Iced dá os
 blocos básicos (botão, texto, rolagem); ele não diz como uma ferramenta do
-FeatherOffice deve parecer nem se comportar. Sem uma peça comum, cada
+FeatherWorks deve parecer nem se comportar. Sem uma peça comum, cada
 aplicativo reinventaria a própria faixa de opções, o próprio tema escuro e os
 próprios ícones — e eles iriam se afastando um do outro a cada mudança.
 
@@ -85,7 +85,7 @@ Os desenhos específicos adicionais estão disponíveis como `editar_dinamica`,
 |---|---|
 | `tema` | paleta clara/escura, cores de destaque, estilos de botão, painel e rolagem |
 | `icones` | catálogo de ícones SVG embutido |
-| `marca` | penas do FeatherOffice e a cor de cada aplicativo |
+| `marca` | penas do FeatherWorks e a cor de cada aplicativo |
 | `cromo` | barra de título própria (arrastar, minimizar, maximizar, fechar) |
 | `janelas` | abrir e fechar janelas auxiliares, uma por função |
 | `ribbon`, `componentes` | faixa de opções: abas, grupos, botões grandes e pequenos |
@@ -106,14 +106,14 @@ No `Cargo.toml` do aplicativo:
 
 ```toml
 [dependencies]
-feather-ui = { git = "https://github.com/FeatherOffice/feather-ui", tag = "v0.2.9" }
+feather-ui = { git = "https://github.com/feather-works/feather-ui", tag = "v0.2.9" }
 ```
 
 Para desenvolver a biblioteca e o aplicativo lado a lado, aponte para a cópia
 local sem mudar a dependência acima:
 
 ```toml
-[patch."https://github.com/FeatherOffice/feather-ui"]
+[patch."https://github.com/feather-works/feather-ui"]
 feather-ui = { path = "../feather-ui" }
 ```
 

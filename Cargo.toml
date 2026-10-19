@@ -1,12 +1,12 @@
 [package]
 name = "feather-ui"
 version = "0.2.10"
-description = "Interface compartilhada da suíte FeatherOffice: tema, ícones, marca e componentes Iced"
-authors = ["FeatherOffice"]
+description = "Interface compartilhada da suíte FeatherWorks: tema, ícones, marca e componentes Iced"
+authors = ["FeatherWorks"]
 edition = "2021"
 rust-version = "1.77.2"
 license = "GPL-3.0-only"
-repository = "https://github.com/FeatherOffice/feather-ui"
+repository = "https://github.com/feather-works/feather-ui"
 publish = false
 
 [dependencies]

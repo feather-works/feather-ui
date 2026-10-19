@@ -1,4 +1,4 @@
-//! Estrutura visual da área de configurações do FeatherOffice.
+//! Estrutura visual da área de configurações do FeatherWorks.
 //! Não conhece documentos nem preferências: recebe apenas eventos do app.
 use iced::{Alignment, Background, Border, Element, Length};
 use iced::widget::{button, column, container, row, text, Space};

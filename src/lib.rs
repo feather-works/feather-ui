@@ -1,4 +1,4 @@
-//! Fundação da interface nativa da suíte FeatherOffice (Iced 0.13).
+//! Fundação da interface nativa da suíte FeatherWorks (Iced 0.13).
 //! Sem dependência dos motores: pode ser usado pelos três aplicativos, quando
 //! tiverem interfaces em Iced. Tokens, estado de tema e componentes vivem aqui.
 
