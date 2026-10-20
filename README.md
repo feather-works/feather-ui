@@ -141,5 +141,5 @@ confira o desenho e atualize o valor de referência no mesmo commit.
 
 ## Licença
 
-GPL-3.0 (ver [`LICENSE`](LICENSE)). Os ícones no estilo Tabler seguem a
+MIT (ver [`LICENSE`](LICENSE)). Os ícones no estilo Tabler seguem a
 licença MIT em [`dados/TABLER-LICENSE.txt`](dados/TABLER-LICENSE.txt).
