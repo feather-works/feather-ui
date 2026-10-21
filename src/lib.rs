@@ -1,6 +1,6 @@
-//! Fundação da interface nativa da suíte FeatherWorks (Iced 0.13).
+//! Fundação da interface nativa da suíte FeatherWorks (pelicano).
 //! Sem dependência dos motores: pode ser usado pelos três aplicativos, quando
-//! tiverem interfaces em Iced. Tokens, estado de tema e componentes vivem aqui.
+//! tiverem interfaces no pelicano. Tokens, estado de tema e componentes vivem aqui.
 
 pub mod atalhos;
 /// Ajuda pesquisável e navegável nativa, compartilhada entre Docs/Sheet/Slide.
@@ -24,7 +24,7 @@ pub mod janelas;
 pub mod tema;
 /// Aba Desenhar: camada de tinta e controles das canetas (sem motor).
 pub mod tinta;
-/// Contorno das letras pela fonte do Iced (texto artístico / WordArt).
+/// Contorno das letras pela fonte do pelicano (texto artístico / WordArt).
 pub mod texto_contorno;
 /// Pressão da caneta (XInput2 no Linux, WM_POINTER no Windows) e diagnóstico.
 pub mod caneta;

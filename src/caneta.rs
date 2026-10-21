@@ -1,6 +1,6 @@
 //! Pressão da caneta (mesa digitalizadora) para a camada de tinta.
 //!
-//! O Iced 0.13 / winit 0.30 entregam a caneta como mouse, sem a força.
+//! O pelicano / winit 0.30 entregam a caneta como mouse, sem a força.
 //! Este módulo lê a pressão por fora, pelo sistema de janelas, e guarda
 //! amostras com o instante em que chegaram ([`FontePressao`]); a camada
 //! ([`crate::tinta::Camada`]) casa cada ponto do traço com a amostra mais
@@ -21,10 +21,10 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use iced::futures::channel::mpsc;
-use iced::{Point, Rectangle, Size};
+use pelicano::futures::channel::mpsc;
+use pelicano::{Point, Rect, Size};
 
-/// Distância máxima no tempo entre o ponto do Iced e a amostra de pressão.
+/// Distância máxima no tempo entre o ponto do mouse e a amostra de pressão.
 /// Os dois chegam por conexões diferentes ao mesmo servidor, quase juntos.
 pub const JANELA_CASAMENTO: Duration = Duration::from_millis(60);
 /// Amostras guardadas (algumas centenas de ms de caneta a ~200 Hz).
@@ -44,7 +44,7 @@ struct Interno {
     /// Janela X do aplicativo (0 = desconhecida): a posição da ponta é
     /// lida relativa a ela.
     janela_x11: AtomicU32,
-    /// Tamanho lógico (Iced) da janela, para converter pixel físico em lógico.
+    /// Tamanho lógico da janela, para converter pixel físico em lógico.
     tamanho_logico: Mutex<Option<Size>>,
     /// Onde a camada de tinta captura, em coordenadas lógicas da janela.
     /// `None` = modo desenho desligado.
@@ -54,14 +54,14 @@ struct Interno {
     /// Toques fora da tinta, ainda não entregues como clique
     /// ([`crate::clique_caneta`]).
     cliques: Mutex<VecDeque<ToqueCaneta>>,
-    /// Acorda a assinatura do Iced quando chega toque.
+    /// Acorda a assinatura quando chega toque.
     despertar: Mutex<Option<mpsc::UnboundedSender<()>>>,
     /// Instante em que a ponta encostou (None = levantada).
     contato: Mutex<Option<Instant>>,
     /// Instante do último encostar (fica depois de levantar).
     ultimo_contato: Mutex<Option<Instant>>,
     /// Último sinal da caneta: toque ou levantar. Diz se
-    /// um clique que o Iced recebeu veio dela ou do mouse.
+    /// um clique que a janela recebeu veio dela ou do mouse.
     ultimo_sinal: Mutex<Option<Instant>>,
 }
 
@@ -69,11 +69,11 @@ struct Interno {
 /// que captura e a origem do widget (os pontos da camada são relativos a ela).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ZonaTinta {
-    pub area: Rectangle,
+    pub area: Rect,
     pub origem: Point,
 }
 
-/// Fase de um toque da ponta da caneta lido por fora do Iced.
+/// Fase de um toque da ponta da caneta lido por fora da janela.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaseToque {
     Encostou,
@@ -82,7 +82,7 @@ pub enum FaseToque {
 }
 
 /// Um evento da ponta lido pelo XInput2: posição em coordenadas **lógicas
-/// da janela** (as mesmas do Iced), pressão crua `0..=1` (quando veio) e
+/// da janela** (as mesmas dos widgets), pressão crua `0..=1` (quando veio) e
 /// se começou dentro da zona da camada de tinta (`na_tinta`; vale o do
 /// encostar para o toque inteiro).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -170,9 +170,9 @@ impl FontePressao {
         }
     }
 
-    // ---------------------------------------------- toques fora do Iced
+    // ---------------------------------------------- toques por fora
 
-    /// Janela X do aplicativo (o id que o winit criou). Sem ela a leitura
+    /// Janela X do aplicativo (o id que o winit criou; vem do `pelicano::Task::window_handle`). Sem ela a leitura
     /// não sabe onde a ponta está e não gera toques para a tinta.
     pub fn definir_janela_x11(&self, janela: u32) {
         self.interno.janela_x11.store(janela, Ordering::Relaxed);
@@ -182,7 +182,7 @@ impl FontePressao {
         Some(self.interno.janela_x11.load(Ordering::Relaxed)).filter(|&j| j != 0)
     }
 
-    /// Tamanho lógico da janela (o que o Iced informa no redimensionar).
+    /// Tamanho lógico da janela (o `Event::Resized` do pelicano).
     pub fn definir_tamanho_logico(&self, tamanho: Size) {
         if let Ok(mut t) = self.interno.tamanho_logico.lock() {
             *t = Some(tamanho);
@@ -213,7 +213,7 @@ impl FontePressao {
         self.janela_x11().is_some()
     }
 
-    /// Guarda um toque e acorda a assinatura do Iced.
+    /// Guarda um toque e acorda a assinatura.
     pub fn enviar_toque(&self, toque: ToqueCaneta) {
         if let Ok(mut fila) = self.interno.toques.lock() {
             if fila.len() >= MAX_TOQUES {
@@ -282,7 +282,7 @@ impl FontePressao {
     }
 
     /// A caneta está em uso: encostada, ou deu sinal há até `janela`. Um
-    /// clique que o Iced recebe fora disso é do mouse.
+    /// clique que a janela recebe fora disso é do mouse.
     pub fn caneta_em_uso(&self, janela: Duration) -> bool {
         self.em_contato()
             || self.interno.ultimo_sinal.lock().is_ok_and(|u| u.is_some_and(|u| u.elapsed() <= janela))
@@ -300,33 +300,45 @@ impl FontePressao {
     }
 }
 
-/// Assinatura do Iced com os toques da caneta lidos por fora (lotes, em
-/// ordem). Uma por fonte; o app transforma cada lote numa mensagem.
-pub fn assinatura_toques(fonte: &FontePressao) -> iced::Subscription<Vec<ToqueCaneta>> {
-    use iced::futures::{SinkExt as _, StreamExt as _};
-    let fonte = fonte.clone();
+/// Assinatura com os toques da caneta lidos por fora (lotes, em ordem).
+/// Uma por fonte; o app transforma cada lote numa mensagem.
+pub fn assinatura_toques(fonte: &FontePressao) -> pelicano::Subscription<Vec<ToqueCaneta>> {
     let id = Arc::as_ptr(&fonte.interno) as usize;
-    iced::Subscription::run_with_id(
-        ("feather-ui-caneta-toques", id),
-        iced::stream::channel(64, move |mut saida: mpsc::Sender<Vec<ToqueCaneta>>| async move {
-            let (tx, mut rx) = mpsc::unbounded();
-            fonte.registrar_despertar(tx);
-            // Toque que chegou antes de a assinatura existir também vai.
-            let pendentes = fonte.recolher_toques();
-            if !pendentes.is_empty() && saida.send(pendentes).await.is_err() {
-                return;
-            }
-            while rx.next().await.is_some() {
-                let lote = fonte.recolher_toques();
-                if !lote.is_empty() && saida.send(lote).await.is_err() {
-                    return;
-                }
-            }
-        }),
-    )
+    pelicano::Subscription::run_with_id(("feather-ui-caneta-toques", id), fluxo_toques(fonte.clone()))
 }
 
-/// Pixel físico da janela X → coordenada lógica do Iced, pela razão entre
+fn fluxo_toques(fonte: FontePressao) -> impl pelicano::futures::Stream<Item = Vec<ToqueCaneta>> + Send {
+    use pelicano::futures::StreamExt as _;
+    // O despertar só é registrado quando o fluxo roda: o pelicano descarta, sem rodar, o
+    // fluxo montado nas outras chamadas de `subscription` com o mesmo id.
+    pelicano::futures::stream::unfold(None, move |rx: Option<mpsc::UnboundedReceiver<()>>| {
+        let fonte = fonte.clone();
+        async move {
+            let mut rx = match rx {
+                Some(rx) => rx,
+                None => {
+                    let (tx, rx) = mpsc::unbounded();
+                    fonte.registrar_despertar(tx);
+                    // Toque que chegou antes de a assinatura existir também vai.
+                    let pendentes = fonte.recolher_toques();
+                    if !pendentes.is_empty() {
+                        return Some((pendentes, Some(rx)));
+                    }
+                    rx
+                }
+            };
+            loop {
+                rx.next().await?;
+                let lote = fonte.recolher_toques();
+                if !lote.is_empty() {
+                    return Some((lote, Some(rx)));
+                }
+            }
+        }
+    })
+}
+
+/// Pixel físico da janela X → coordenada lógica, pela razão entre
 /// as larguras física e lógica. Sem tamanho lógico (ou inválido), 1:1.
 pub fn fisico_para_logico(x: f32, y: f32, largura_fisica: f32, largura_logica: Option<f32>) -> Point {
     let escala = match largura_logica {
@@ -818,12 +830,12 @@ pub mod x11 {
 
 // ------------------------------------------------------------ Windows
 
-/// `WM_POINTER*` + `GetPointerPenInfo` por subclasse da janela do Iced.
+/// `WM_POINTER*` + `GetPointerPenInfo` por subclasse da janela.
 /// A mensagem segue para o winit normalmente (`DefSubclassProc`).
 #[cfg(windows)]
 pub mod windows {
     use super::{anotar, FontePressao};
-    use iced::window::raw_window_handle::RawWindowHandle;
+    use pelicano::raw_window_handle::RawWindowHandle;
     use std::time::Instant;
     use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows_sys::Win32::UI::Input::Pointer::{GetPointerPenInfo, GetPointerType, POINTER_PEN_INFO};
@@ -835,7 +847,7 @@ pub mod windows {
     const ID_SUBCLASSE: usize = 0x4645_4e41; // "FENA"
 
     /// Liga a leitura da pressão na janela. Chamar na thread da janela
-    /// (o `iced::window::run_with_handle` já roda nela).
+    /// (o `pelicano::Task::window_handle` já roda nela).
     pub fn ligar_na_janela(janela: RawWindowHandle, fonte: FontePressao) -> Result<(), String> {
         let RawWindowHandle::Win32(h) = janela else { return Err("janela que não é Win32".into()) };
         let hwnd = h.hwnd.get() as HWND;
@@ -1024,7 +1036,7 @@ mod testes {
         f.definir_janela_x11(77);
         assert_eq!(f.janela_x11(), Some(77));
         assert!(f.entrega_toques());
-        let area = Rectangle::new(Point::new(10.0, 10.0), Size::new(5.0, 5.0));
+        let area = Rect::new(Point::new(10.0, 10.0), Size::new(5.0, 5.0));
         f.definir_zona_tinta(Some(ZonaTinta { area, origem: Point::ORIGIN }));
         assert!(f.zona_tinta().is_some_and(|z| z.area.contains(Point::new(12.0, 12.0))));
         f.definir_zona_tinta(None);
@@ -1036,6 +1048,21 @@ mod testes {
         let fila = f.recolher_toques();
         assert_eq!(fila.len(), MAX_TOQUES);
         assert_eq!(fila[0].posicao.x, 10.0);
+    }
+
+    #[test]
+    fn assinatura_entrega_o_pendente_e_acorda_a_cada_toque() {
+        use pelicano::futures::{executor::block_on, StreamExt as _};
+        let f = FontePressao::nova();
+        let toque = |x: f32| ToqueCaneta { fase: FaseToque::Moveu, posicao: Point::new(x, 0.0), pressao: None, instante: Instant::now(), na_tinta: true, borracha: false };
+        f.enviar_toque(toque(1.0));
+        let mut fluxo = Box::pin(fluxo_toques(f.clone()));
+        let xs = |l: Option<Vec<ToqueCaneta>>| l.unwrap().iter().map(|t| t.posicao.x).collect::<Vec<_>>();
+        assert_eq!(xs(block_on(fluxo.next())), vec![1.0], "o que chegou antes vai primeiro");
+        f.enviar_toque(toque(2.0));
+        f.enviar_toque(toque(3.0));
+        assert_eq!(xs(block_on(fluxo.next())), vec![2.0, 3.0]);
+        let _ = assinatura_toques(&f);
     }
 
     #[test]

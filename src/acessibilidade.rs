@@ -1,10 +1,10 @@
-//! Contraste WCAG 2.x para componentes Iced da suíte FeatherWorks.
+//! Contraste WCAG 2.x para componentes da suíte FeatherWorks.
 //!
 //! Funções puras: não consultam o tema global, não dependem de documento e
 //! podem ser testadas em paralelo, independentemente de janelas/monitor.
 //! Os valores devem ser cores opacas (RGB sRGB, alpha=1.0).
 
-use iced::Color;
+use pelicano::Color;
 
 /// WCAG AA para texto normal (incluindo labels pequenos e abas da Ribbon).
 pub const CONTRASTE_TEXTO_AA: f32 = 4.5;
@@ -110,7 +110,7 @@ mod testes {
 
     fn cor(hex: &str) -> Color {
         let v = u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap();
-        Color::from_rgb8((v >> 16) as u8, (v >> 8) as u8, v as u8)
+        Color::rgb8((v >> 16) as u8, (v >> 8) as u8, v as u8)
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod testes {
         for r in (0..=255).step_by(17) {
             for g in (0..=255).step_by(17) {
                 for b in (0..=255).step_by(17) {
-                    let bg = Color::from_rgb8(r, g, b);
+                    let bg = Color::rgb8(r, g, b);
                     assert!(contraste(texto_sobre(bg), bg) >= CONTRASTE_TEXTO_AA);
                 }
             }

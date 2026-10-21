@@ -1,10 +1,9 @@
-//! UI-011 — grupo de alinhamento horizontal compartilhado (Iced).
+//! UI-011 — grupo de alinhamento horizontal compartilhado.
 //!
 //! Recebe somente o estado visual e uma função que produz a mensagem do
 //! aplicativo. Não depende de cores, formatos nem modelos de Docs/Sheet/Slide.
 
-use iced::widget::row;
-use iced::{Alignment, Element};
+use pelicano::{row, Align, Element};
 
 use crate::{componentes::botao_icone, icones::icone};
 
@@ -72,7 +71,7 @@ where
     M: Clone + 'a + 'static,
     F: Fn(Horizontal) -> M + 'a,
 {
-    let mut linha = row![].spacing(3).align_y(Alignment::Center);
+    let mut linha = row![].spacing(3).align(Align::Center);
     for opcao in Horizontal::TODOS {
         if !justificar && opcao == Horizontal::Justificado {
             continue;

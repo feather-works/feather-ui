@@ -5,10 +5,8 @@
 //! dele: as mensagens do console ([`Monitor::registrar`]) e as métricas do
 //! documento ([`Metricas`]). Nada é gravado em disco nem sai da máquina.
 use crate::tema::*;
-use iced::widget::canvas::{self, Frame, Geometry, Text};
-use iced::widget::{button, column, container, row, scrollable, stack, svg, text, text_input, Space};
-use iced::{alignment, mouse, Alignment, Background, Border, Color, Element, Font, Length, Point,
-    Rectangle, Renderer, Size, Task, Theme};
+use pelicano::{button, column, container, program, row, scrollable, stack, svg, text, text_input, Align, Background,
+    Border, Color, Element, Font, Length, Point, Program, Rect, Renderer, Size, Space, Style, Svg, Task, Theme};
 use std::{collections::VecDeque, time::Instant};
 
 const MAX_REGISTROS: usize = 1_000;
@@ -37,10 +35,10 @@ impl Nivel {
         match self {
             Self::Info => COR_AZUL_ACENTO(),
             Self::Aviso => {
-                if escuro() { Color::from_rgb8(245, 193, 97) } else { Color::from_rgb8(135, 85, 12) }
+                if escuro() { Color::rgb8(245, 193, 97) } else { Color::rgb8(135, 85, 12) }
             }
             Self::Erro => {
-                if escuro() { Color::from_rgb8(255, 145, 145) } else { Color::from_rgb8(184, 45, 55) }
+                if escuro() { Color::rgb8(255, 145, 145) } else { Color::rgb8(184, 45, 55) }
             }
         }
     }
@@ -188,7 +186,7 @@ impl Console {
     fn visiveis(&self) -> impl Iterator<Item = &Registro> {
         let busca = self.busca.trim().to_lowercase();
         self.registros.iter().filter(move |r| {
-            self.filtro.is_none_or(|n| n == r.nivel)
+            self.filtro.map_or(true, |n| n == r.nivel)
                 && (busca.is_empty()
                     || r.mensagem.to_lowercase().contains(&busca)
                     || r.origem.to_lowercase().contains(&busca))
@@ -204,7 +202,7 @@ impl Console {
 
     fn rolar_ao_fim<M: Send + 'static>(&self) -> Task<M> {
         if self.acompanhar {
-            scrollable::snap_to(scrollable::Id::new(ID_CONSOLE), scrollable::RelativeOffset::END)
+            Task::snap_to(ID_CONSOLE, Point::new(0.0, 1.0))
         } else {
             Task::none()
         }
@@ -316,7 +314,7 @@ impl Monitor {
                 self.console.bytes = 0;
                 self.console.descartados = 0;
             }
-            Evento::Copiar => return iced::clipboard::write(self.console.texto_visivel()),
+            Evento::Copiar => return Task::write_clipboard(self.console.texto_visivel()),
             Evento::Acompanhar => {
                 self.console.acompanhar = !self.console.acompanhar;
                 return self.console.rolar_ao_fim();
@@ -338,7 +336,7 @@ impl Monitor {
         metricas: Metricas,
         msg: impl Fn(Evento) -> M + Clone + 'a,
     ) -> Element<'a, M> {
-        let mut abas = row![].spacing(14).align_y(Alignment::Center);
+        let mut abas = row![].spacing(14).align(Align::Center);
         for (i, (titulo, icone)) in [
             (crate::idioma::t("Memória"), "device-desktop"),
             (crate::idioma::t("Console"), "terminal"),
@@ -347,28 +345,22 @@ impl Monitor {
             let selecionado = self.aba == i;
             let cor = if selecionado { verde() } else { COR_TEXTO_MUTED() };
             let conteudo = row![
-                crate::icones::icone(icone, 21.0).style(move |_, _| svg::Style { color: Some(cor) }),
+                crate::icones::icone(icone, 21.0).color(cor),
                 text(titulo).size(14),
-            ].spacing(10).align_y(Alignment::Center);
+            ].spacing(10).align(Align::Center);
             let aba = button(conteudo)
                 .padding([11, 18])
                 .style(move |tema, estado| {
                     let mut estilo = estilo_botao_secundario(tema, estado);
-                    estilo.border.width = 0.0;
-                    estilo.border.radius = 9.0.into();
+                    estilo.border = Border::rounded(9.0);
                     estilo.background = selecionado.then(|| Background::Color(COR_AZUL_FUNDO()));
-                    estilo.text_color = if selecionado { verde() } else { COR_TEXTO_MUTED() };
-                    estilo
+                    estilo.text_color(if selecionado { verde() } else { COR_TEXTO_MUTED() })
                 })
                 .on_press(msg(Evento::Aba(i)));
-            let detalhe = container(Space::with_height(3))
-                .width(Length::Fill)
-                .style(move |_| container::Style {
-                    background: selecionado.then(|| Background::Color(verde())),
-                    border: Border { radius: 3.0.into(), ..Default::default() },
-                    ..Default::default()
-                });
-            abas = abas.push(column![aba, detalhe].spacing(0));
+            // Largura fixa: um traço FILL fazia a primeira aba tomar a linha toda e espremer as outras.
+            let detalhe = container(Space::new(48.0, 3.0))
+                .style(move |_| Style { background: selecionado.then(|| Background::Color(verde())), ..Style::default().border(Border::rounded(3.0)) });
+            abas = abas.push(column![aba, detalhe].spacing(0).align(Align::Center));
         }
         let ocupado = metricas.ocupado.clone();
         let corpo = match self.aba {
@@ -378,19 +370,15 @@ impl Monitor {
         };
         let rodape = row![
             text(ocupado.unwrap_or_else(|| crate::idioma::t("Sessão ativa").into())).size(11).color(COR_TEXTO_MUTED()),
-            Space::with_width(Length::Fill),
-            container(Space::new(Length::Fixed(9.0), Length::Fixed(9.0)))
-                .style(|_| container::Style {
-                    background: Some(Background::Color(verde())),
-                    border: Border { radius: 5.0.into(), ..Default::default() },
-                    ..Default::default()
-                }),
+            Space::new(Length::FILL, 0.0),
+            container(Space::new(9.0, 9.0))
+                .style(|_| Style::default().background(verde()).border(Border::rounded(5.0))),
             text(crate::idioma::t("Registros locais · atualização a cada segundo")).size(11).color(COR_TEXTO_MUTED()),
-        ].spacing(9).align_y(Alignment::Center);
+        ].spacing(9).align(Align::Center);
         container(column![abas, divisor(), corpo, divisor(), rodape].spacing(13))
             .padding([18, 22])
-            .width(Length::Fill)
-            .height(Length::Fill)
+            .width(Length::FILL)
+            .height(Length::FILL)
             .into()
     }
 
@@ -424,14 +412,14 @@ impl Monitor {
                 .push(
                     container(
                         row![
-                            text(&r.tempo).font(Font::MONOSPACE).size(11).color(COR_TEXTO_MUTED()).width(76),
-                            text(r.nivel.rotulo()).size(10).color(r.nivel.cor()).width(46),
-                            text(r.origem).size(11).color(COR_TEXTO_MUTED()).width(72),
-                            text(&r.mensagem).font(Font::MONOSPACE).size(12).width(Length::Fill),
+                            text(&r.tempo).font(Font::MONO).size(11).color(COR_TEXTO_MUTED()).width(76.0),
+                            text(r.nivel.rotulo()).size(10).color(r.nivel.cor()).width(46.0),
+                            text(r.origem).size(11).color(COR_TEXTO_MUTED()).width(72.0),
+                            text(&r.mensagem).font(Font::MONO).size(12).width(Length::FILL),
                         ].spacing(10),
                     )
                     .padding([9, 12])
-                    .width(Length::Fill),
+                    .width(Length::FILL),
                 )
                 .push(divisor());
         }
@@ -452,9 +440,9 @@ impl Monitor {
                 .padding(28),
             );
         }
-        let lista = container(scrollable(linhas).id(scrollable::Id::new(ID_CONSOLE)).height(Length::Fill))
-            .width(Length::Fill)
-            .height(Length::Fill)
+        let lista = container(scrollable(linhas).id(ID_CONSOLE).height(Length::FILL))
+            .width(Length::FILL)
+            .height(Length::FILL)
             .style(painel);
         let resumo = format!(
             "{}{}",
@@ -469,22 +457,22 @@ impl Monitor {
             busca,
             row![
                 filtros,
-                Space::with_width(Length::Fill),
+                Space::new(Length::FILL, 0.0),
                 acao(crate::idioma::t("Copiar"), msg(Evento::Copiar)),
                 acao(crate::idioma::t("Limpar"), msg(Evento::Limpar)),
-            ].spacing(6).align_y(Alignment::Center),
+            ].spacing(6).align(Align::Center),
             lista,
             row![
                 text(resumo).size(11).color(COR_TEXTO_MUTED()),
-                Space::with_width(Length::Fill),
+                Space::new(Length::FILL, 0.0),
                 acao(
                     if console.acompanhar { crate::idioma::t("Acompanhar: ligado") } else { crate::idioma::t("Acompanhar: desligado") },
                     msg(Evento::Acompanhar),
                 ),
-            ].spacing(8).align_y(Alignment::Center),
+            ].spacing(8).align(Align::Center),
         ]
         .spacing(10)
-        .height(Length::Fill)
+        .height(Length::FILL)
         .into()
     }
 
@@ -503,21 +491,21 @@ impl Monitor {
         ].spacing(14);
 
         let titulo = row![
-            crate::icones::icone("chart-bar", 20.0).style(|_, _| svg::Style { color: Some(verde()) }),
+            crate::icones::icone("chart-bar", 20.0).color(verde()),
             text(crate::idioma::t("Histórico de memória")).size(16),
-            Space::with_width(Length::Fill),
+            Space::new(Length::FILL, 0.0),
             button(row![
                 text(crate::idioma::tf("Últimas {} amostras", &[&self.amostras])).size(11),
                 crate::icones::icone("chevron-down", 14.0)
-                    .style(|_, _| svg::Style { color: Some(COR_TEXTO_MUTED()) }),
-            ].spacing(10).align_y(Alignment::Center))
+                    .color(COR_TEXTO_MUTED()),
+            ].spacing(10).align(Align::Center))
                 .padding([8, 11])
                 .style(estilo_botao_secundario)
                 .on_press(msg(Evento::AlternarAmostras)),
-        ].spacing(11).align_y(Alignment::Center);
-        let grafico = canvas::Canvas::new(GraficoMemoria { amostras: &self.historico, janela: self.amostras })
-            .width(Length::Fill)
-            .height(Length::Fill);
+        ].spacing(11).align(Align::Center);
+        let grafico = program(GraficoMemoria { amostras: &self.historico, janela: self.amostras })
+            .width(Length::FILL)
+            .height(Length::FILL);
         let grafico_base = container(column![
             titulo,
             grafico,
@@ -528,45 +516,47 @@ impl Monitor {
             }).size(11).color(COR_TEXTO_MUTED()),
         ].spacing(12))
             .padding(16)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(painel);
+            .width(Length::FILL)
+            .height(Length::FILL)
+            .style(painel)
+            // Janela baixa demais para o gráfico: corta em vez de vazar sobre o banner.
+            .clip(true);
         let grafico: Element<'a, M> = if self.menu_amostras {
             let mut opcoes = column![].spacing(2).padding(5);
             for n in [20, 40, 80] {
                 opcoes = opcoes.push(
                     button(row![
                         text(crate::idioma::tf("Últimas {} amostras", &[&n])).size(12),
-                        Space::with_width(Length::Fill),
+                        Space::new(Length::FILL, 0.0),
                         if self.amostras == n {
                             crate::icones::icone("circle-check", 15.0)
-                                .style(|_, _| svg::Style { color: Some(verde()) })
+                                .color(verde())
                         } else {
                             crate::icones::icone("chevron-down", 15.0)
-                                .style(|_, _| svg::Style { color: Some(COR_TEXTO_MUTED()) })
+                                .color(COR_TEXTO_MUTED())
                         },
-                    ].spacing(8).align_y(Alignment::Center))
-                        .width(Length::Fill)
+                    ].spacing(8).align(Align::Center))
+                        .width(Length::FILL)
                         .padding([8, 10])
                         .style(estilo_botao_secundario)
                         .on_press(msg(Evento::Amostras(n))),
                 );
             }
-            let menu = container(opcoes).width(Length::Fixed(211.0)).style(painel);
+            let menu = container(opcoes).width(211.0).style(painel);
             stack![
                 grafico_base,
                 column![
-                    Space::with_height(Length::Fixed(57.0)),
-                    row![Space::with_width(Length::Fill), menu],
+                    Space::new(0.0, 57.0),
+                    row![Space::new(Length::FILL, 0.0), menu],
                 ]
-            ].width(Length::Fill).height(Length::Fill).into()
+            ].width(Length::FILL).height(Length::FILL).into()
         } else {
             grafico_base.into()
         };
         // Sem rolagem: o histórico ocupa o que sobra da janela abaixo dos
         // cartões, e encolhe com ela.
         column![cartoes, grafico, banner_informativo()].spacing(12)
-            .height(Length::Fill)
+            .height(Length::FILL)
             .into()
     }
 
@@ -585,30 +575,25 @@ impl Monitor {
             corpo = corpo.push(
                 container(
                     row![
-                        text(rotulo).size(13).color(COR_TEXTO_MUTED()).width(160),
-                        text(valor).size(13).width(Length::Fill),
+                        text(rotulo).size(13).color(COR_TEXTO_MUTED()).width(160.0),
+                        text(valor).size(13).width(Length::FILL),
                     ].spacing(12),
                 )
                 .padding(16)
-                .width(Length::Fill)
+                .width(Length::FILL)
                 .style(painel),
             );
         }
-        scrollable(corpo).height(Length::Fill).into()
+        scrollable(corpo).height(Length::FILL).into()
     }
 }
 
-fn painel(_: &Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        border: Border { color: COR_BORDA_SUAVE(), width: 1., radius: 14.0.into() },
-        text_color: Some(COR_TEXTO()),
-        ..Default::default()
-    }
+fn painel(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL()).border(Border::rounded(14.0).color(COR_BORDA_SUAVE(), 1.0)).text_color(COR_TEXTO())
 }
 
 fn divisor<'a, M: 'static>() -> Element<'a, M> {
-    container(Space::with_height(1)).width(Length::Fill).style(estilo_linha).into()
+    container(Space::new(Length::FILL, 1.0)).width(Length::FILL).style(estilo_linha).into()
 }
 
 fn cartao<'a, M: 'static>(rotulo: String, valor: String, detalhe: String) -> Element<'a, M> {
@@ -620,21 +605,21 @@ fn cartao<'a, M: 'static>(rotulo: String, valor: String, detalhe: String) -> Ele
         ].spacing(7),
     )
     .padding(18)
-    .width(Length::Fill)
+    .width(Length::FILL)
     .style(painel)
     .into()
 }
 
 fn verde() -> Color {
-    if escuro() { Color::from_rgb8(92, 214, 145) } else { Color::from_rgb8(21, 137, 67) }
+    if escuro() { Color::rgb8(92, 214, 145) } else { Color::rgb8(21, 137, 67) }
 }
 
 fn azul() -> Color {
-    if escuro() { Color::from_rgb8(123, 194, 246) } else { Color::from_rgb8(19, 135, 124) }
+    if escuro() { Color::rgb8(123, 194, 246) } else { Color::rgb8(19, 135, 124) }
 }
 
 fn roxo() -> Color {
-    if escuro() { Color::from_rgb8(189, 155, 255) } else { Color::from_rgb8(127, 66, 210) }
+    if escuro() { Color::rgb8(189, 155, 255) } else { Color::rgb8(127, 66, 210) }
 }
 
 /// RSS do processo em KiB (Linux: `/proc/self/status`).
@@ -759,18 +744,14 @@ fn rosca_svg(valor: Option<f32>, hex: &str) -> String {
 }
 
 fn rosca<'a, M: 'static>(valor: Option<f32>, hex: &'static str) -> Element<'a, M> {
+    const LADO: f32 = 72.0;
     let rotulo = valor.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
-    let desenho = svg::Svg::new(svg::Handle::from_memory(rosca_svg(valor, hex).into_bytes()))
-        .width(Length::Fixed(90.0))
-        .height(Length::Fixed(90.0));
-    stack![
-        desenho,
-        container(text(rotulo).size(15).color(COR_TEXTO()))
-            .width(90.0)
-            .height(90.0)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill),
-    ].width(Length::Fixed(90.0)).height(Length::Fixed(90.0)).into()
+    let desenho = Svg::from_bytes(rosca_svg(valor, hex).as_bytes()).map(|s| svg(s).width(LADO).height(LADO));
+    stack(desenho.map(Element::from))
+        .push(container(text(rotulo).size(14).color(COR_TEXTO())).width(LADO).height(LADO).center())
+        .width(LADO)
+        .height(LADO)
+        .into()
 }
 
 fn cartao_destaque<'a, M: 'static>(
@@ -781,45 +762,37 @@ fn cartao_destaque<'a, M: 'static>(
     cor: Color,
     medidor: Option<(Option<f32>, &'static str)>,
 ) -> Element<'a, M> {
-    let fundo_icone = if escuro() { Color::from_rgb8(50, 60, 64) } else { Color::from_rgb8(239, 248, 245) };
-    let icone = crate::icones::icone(icone, 25.0).style(move |_, _| svg::Style { color: Some(cor) });
-    let selo = container(icone).padding(14).style(move |_| container::Style {
-        background: Some(Background::Color(fundo_icone)),
-        border: Border { radius: 34.0.into(), ..Default::default() },
-        ..Default::default()
-    });
+    // Ícone ao lado do título (não num selo à esquerda): num cartão de ~270 px
+    // o selo e a rosca deixavam ~60 px ao valor, que quebrava sobre o detalhe.
     let conteudo = column![
-        text(titulo).size(13).color(COR_TEXTO_MUTED()),
-        text(valor).size(27).color(COR_TEXTO()),
+        row![crate::icones::icone(icone, 16.0).color(cor), text(titulo).size(13).color(COR_TEXTO_MUTED())]
+            .spacing(7).align(Align::Center),
+        text(valor).size(26).color(COR_TEXTO()),
         text(detalhe).size(11).color(COR_TEXTO_MUTED()),
-    ].spacing(8).width(Length::Fill);
-    let mut linha = row![selo, conteudo].spacing(16).align_y(Alignment::Center);
+    ].spacing(6).width(Length::FILL);
+    let mut linha = row![conteudo].spacing(12).align(Align::Center);
     if let Some((pct, cor)) = medidor {
         linha = linha.push(rosca(pct, cor));
     }
     container(linha)
         .padding([14, 16])
-        .width(Length::Fill)
-        .height(Length::Fixed(118.0))
+        .width(Length::FILL)
+        .height(118.0)
         .style(painel)
         .into()
 }
 
 fn banner_informativo<'a, M: 'static>() -> Element<'a, M> {
-    let icone = crate::icones::icone("info-circle", 21.0).style(|_, _| svg::Style { color: Some(verde()) });
+    let icone = crate::icones::icone("info-circle", 21.0).color(verde());
     container(row![
         icone,
         text(crate::idioma::t("O monitor acompanha a memória do aplicativo inteiro, incluindo a interface e os documentos abertos."))
             .size(12)
             .color(COR_TEXTO_MUTED()),
-    ].spacing(13).align_y(Alignment::Center))
+    ].spacing(13).align(Align::Center))
         .padding(16)
-        .width(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(Background::Color(COR_PAINEL_FAIXA())),
-            border: Border { color: COR_BORDA_SUAVE(), width: 1.0, radius: 12.0.into() },
-            ..Default::default()
-        })
+        .width(Length::FILL)
+        .style(|_| Style::default().background(COR_PAINEL_FAIXA()).border(Border::rounded(12.0).color(COR_BORDA_SUAVE(), 1.0)))
         .into()
 }
 
@@ -850,56 +823,50 @@ struct GraficoMemoria<'a> {
     janela: usize,
 }
 
-impl<M> canvas::Program<M> for GraficoMemoria<'_> {
+impl<M> Program<M> for GraficoMemoria<'_> {
     type State = ();
 
-    fn draw(&self, _state: &(), renderer: &Renderer, _theme: &Theme, bounds: Rectangle,
-        _cursor: mouse::Cursor) -> Vec<Geometry> {
-        let mut f = Frame::new(renderer, bounds.size());
-        if bounds.width < 120.0 || bounds.height < 90.0 {
-            return vec![f.into_geometry()];
+    fn draw(&self, _: &(), r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
+        if b.width < 120.0 || b.height < 90.0 {
+            return;
         }
-        let esquerda = 75.0;
-        let direita = bounds.width - 8.0;
-        let topo = 9.0;
-        let base = bounds.height - 21.0;
+        let esquerda = b.x + 75.0;
+        let direita = b.x + b.width - 8.0;
+        let topo = b.y + 9.0;
+        let base = b.y + b.height - 21.0;
         let largura = (direita - esquerda).max(1.0);
         let altura = (base - topo).max(1.0);
         let mut serie = self.amostras.iter().rev().take(self.janela.max(1)).copied().collect::<Vec<_>>();
         serie.reverse();
         let maior_kb = serie.iter().copied().max().unwrap_or(0);
         let teto = escala_mib(maior_kb);
-        let grade = if escuro() { Color::from_rgb8(79, 84, 94) } else { Color::from_rgb8(227, 233, 239) };
-        let rotulo = COR_TEXTO_MUTED();
+        let grade = if escuro() { Color::rgb8(79, 84, 94) } else { Color::rgb8(227, 233, 239) };
+        let retangulo = |r: &mut Renderer, x: f32, y: f32, w: f32, h: f32, c: Color| {
+            r.fill_quad(Rect::new(Point::new(x, y), Size::new(w, h)), Some(&c.into()), Border::default(), None)
+        };
         for marca in 0..=4 {
             let mib = teto * marca as f64 / 4.0;
             let y = base - altura * marca as f32 / 4.0;
-            f.fill_rectangle(Point::new(esquerda, y), Size::new(largura, 1.0), grade);
-            f.fill_text(Text {
-                content: if mib.fract() == 0.0 { format!("{mib:.0} MiB") } else { format!("{mib:.1} MiB") },
-                position: Point::new(esquerda - 11.0, y),
-                size: iced::Pixels(11.0),
-                color: rotulo,
-                horizontal_alignment: alignment::Horizontal::Right,
-                vertical_alignment: alignment::Vertical::Center,
-                ..Text::default()
-            });
+            retangulo(r, esquerda, y, largura, 1.0, grade);
+            let rotulo = if mib.fract() == 0.0 { format!("{mib:.0} MiB") } else { format!("{mib:.1} MiB") };
+            // Alinhado à direita e centrado na linha da grade.
+            let m = r.measure(&rotulo, 11.0, Font::DEFAULT, None);
+            r.draw_text(&rotulo, 11.0, Font::DEFAULT, COR_TEXTO_MUTED(), Point::new(esquerda - 11.0 - m.width, y - m.height / 2.0), None);
         }
         let janelas = self.janela.max(1) as f32;
         let passo = largura / janelas;
         let separacao = if passo > 4.0 { 2.0 } else { 0.5 };
         let barra_largura = (passo - separacao).max(0.5);
-        let cor = if escuro() { Color::from_rgb8(72, 193, 118) } else { Color::from_rgb8(38, 161, 87) };
+        let cor = if escuro() { Color::rgb8(72, 193, 118) } else { Color::rgb8(38, 161, 87) };
         for (i, &kb) in serie.iter().enumerate() {
             // Amostras ainda não coletadas ficam sem barra, à esquerda.
             let pos = self.janela.max(serie.len()) - serie.len() + i;
             let x = esquerda + pos as f32 * passo + separacao * 0.5;
             let h = ((kb as f64 / 1024.0 / teto) as f32 * altura).clamp(0.0, altura);
             if h > 0.0 {
-                f.fill_rectangle(Point::new(x, base - h), Size::new(barra_largura, h), cor);
+                retangulo(r, x, base - h, barra_largura, h, cor);
             }
         }
-        vec![f.into_geometry()]
     }
 }
 
@@ -919,8 +886,23 @@ mod testes {
         m.amostrar();
         for aba in 0..3 {
             let _: Task<Teste> = m.atualizar(Evento::Aba(aba));
-            let _ = m.view(Metricas::default(), Teste::Monitor);
+            let e = m.view(Metricas::default(), Teste::Monitor);
+            let png = pelicano::capture(&e, Size::new(900.0, 640.0), 1.0, &Theme::light(), &mut Renderer::new(), None);
+            assert!(!png.is_empty());
         }
+    }
+
+    #[test]
+    fn grafico_desenha_barras_sem_publicar() {
+        let amostras = [10_240, 20_480, 40_960];
+        let g = GraficoMemoria { amostras: &amostras, janela: 20 };
+        let mut fora: Vec<Teste> = Vec::new();
+        let b = Rect::new(Point::ORIGIN, Size::new(400.0, 200.0));
+        let c = Program::<Teste>::update(&g, &mut (), &pelicano::Event::MousePressed(pelicano::MouseButton::Left), b, Some(Point::new(5.0, 5.0)), &mut |e| fora.push(e));
+        assert!(c == pelicano::Captured::No && fora.is_empty());
+        let e: Element<Teste> = program(g).into();
+        let png = pelicano::capture(&e, b.size(), 1.0, &Theme::light(), &mut Renderer::new(), None);
+        assert!(!png.is_empty());
     }
 
     #[test]

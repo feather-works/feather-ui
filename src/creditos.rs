@@ -1,7 +1,6 @@
 //! Quem fez a suíte — o bloco "Colaboradores" do "Sobre" de cada aplicativo.
 //! Mora aqui para os apps mostrarem a mesma lista (regra 3 do CLAUDE.md).
-use iced::widget::{column, row, text};
-use iced::{Element, Length};
+use pelicano::{column, row, text, Element};
 
 use crate::tema::{COR_TEXTO, COR_TEXTO_MUTED};
 
@@ -17,7 +16,7 @@ pub fn colaboradores<'a, M: 'a>() -> Element<'a, M> {
     let mut lista = column![text(crate::idioma::t("Colaboradores")).size(15).color(COR_TEXTO())].spacing(6);
     for (nome, papel) in COLABORADORES {
         lista = lista.push(row![
-            text(*nome).size(13.5).color(COR_TEXTO()).width(Length::Fixed(190.0)),
+            text(*nome).size(13.5).color(COR_TEXTO()).width(190.0),
             text(*papel).size(13).color(COR_TEXTO_MUTED()),
         ].spacing(10));
     }

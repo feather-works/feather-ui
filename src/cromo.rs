@@ -1,7 +1,9 @@
-//! Barra de edição e superfícies de navegação comuns aos aplicativos Iced.
+//! Barra de edição e superfícies de navegação comuns aos aplicativos.
 //! Eventos e operações continuam pertencendo a cada aplicativo.
-use iced::widget::{button, column, container, row, text, tooltip, mouse_area, svg, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length};
+use pelicano::{
+    button, column, container, horizontal_space, mouse_area, row, svg, text, tooltip, Align, Border, Color, Element,
+    Length, Space, Status, Style, SvgView, TooltipPosition,
+};
 
 pub const BARRA_ALTURA: f32 = 42.0;
 
@@ -10,13 +12,9 @@ pub const BARRA_ALTURA: f32 = 42.0;
 pub fn moldura_janela<'a, M: 'a>(conteudo: Element<'a, M>) -> Element<'a, M> {
     container(conteudo)
         .padding(1)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(Background::Color(COR_FUNDO_JANELA())),
-            border: Border { color: COR_BORDA(), width: 1.0, ..Border::default() },
-            ..container::Style::default()
-        })
+        .width(Length::FILL)
+        .height(Length::FILL)
+        .style(|_| Style::default().background(COR_FUNDO_JANELA()).border(Border::default().color(COR_BORDA(), 1.0)))
         .into()
 }
 
@@ -48,18 +46,12 @@ pub fn acao<'a, M: Clone + 'static>(nome: &str, dica: &str, mensagem: Option<M>)
 
 /// Mesmo botão da barra, aceitando ícones próprios do aplicativo (Slide/CAD).
 pub fn acao_icone<'a, M: Clone + 'static>(
-    desenho: iced::widget::svg::Svg<'static, iced::Theme>,
+    desenho: SvgView,
     dica: &str,
     mensagem: Option<M>,
 ) -> Element<'a, M> {
-    tooltip(
-        button(desenho).padding([7, 9])
-            .style(estilo_botao_pequeno(false))
-            .on_press_maybe(mensagem),
-        container(text(dica.to_owned()).size(12))
-            .padding([4, 8]).style(estilo_dica),
-        tooltip::Position::Bottom,
-    ).into()
+    let botao = button(desenho).padding([7, 9]).style(estilo_botao_pequeno(false)).on_press_maybe(mensagem);
+    Element::from(tooltip(botao, dica.to_owned(), TooltipPosition::Bottom).padding([4, 8]).style(crate::tema::estilo_dica)).access_label(dica.to_owned())
 }
 
 /// Linha superior do editor, compatível com mensagens próprias de cada app.
@@ -73,65 +65,63 @@ pub fn barra_editor<'a, M: Clone + 'static>(
 ) -> Element<'a, M> {
     // `None`: o app já tem outra entrada para o menu de arquivos (o FeatherSheet
     // tem o botão Menu na faixa) e o botão "Arquivos" seria repetido.
-    let mut itens = row![emblema()].spacing(2).align_y(Alignment::Center);
+    let mut itens = row![emblema()].spacing(2).align(Align::Center);
     if let Some(abrir) = abrir_arquivos {
         itens = itens.push(button(text(crate::idioma::t("Arquivos")).size(12.5)).padding([7, 10])
             .style(estilo_botao_pequeno(false)).on_press(abrir));
     }
-    itens = itens.push(Space::with_width(6));
+    itens = itens.push(Space::new(6, 0));
     for item in acoes {
         itens = itens.push(acao(item.icone, item.dica, item.mensagem));
     }
-    itens = itens.push(Space::with_width(10))
+    itens = itens.push(Space::new(10, 0))
         .push(row![
             text(arquivo.to_owned()).size(13),
             text(if alterado { crate::idioma::t("• não salvo") } else { crate::idioma::t("salvo") })
                 .size(11.5).color(COR_TEXTO_MUTED()),
-        ].spacing(8).align_y(Alignment::Center))
-        .push(Space::with_width(Length::Fill))
+        ].spacing(8).align(Align::Center))
+        .push(horizontal_space())
         .push(acao("settings", crate::idioma::t("Configurações"), Some(abrir_configuracoes)));
     column![
-        container(itens).padding([0, 12]).width(Length::Fill)
-            .height(Length::Fixed(BARRA_ALTURA)).style(estilo_container_topo),
-        container(Space::with_height(1)).width(Length::Fill).style(estilo_linha),
+        container(itens).padding([0, 12]).width(Length::FILL)
+            .height(BARRA_ALTURA).style(estilo_container_topo),
+        linha(),
     ].into()
 }
 
+fn linha<'a, M: 'a>() -> Element<'a, M> {
+    container(Space::new(Length::FILL, 1)).width(Length::FILL).style(estilo_linha).into()
+}
+
 /// Ícones de janela com os mesmos traços Tabler usados pelo FeatherSlide.
-fn icone_janela(caminho: &str) -> svg::Svg<'static, iced::Theme> {
+fn icone_janela(caminho: &str) -> SvgView {
     let data = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#5f6368\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">{caminho}</svg>"
     );
-    svg::Svg::new(svg::Handle::from_memory(data.into_bytes())).width(16).height(16)
+    svg(crate::icones::carregar(data)).color(COR_TEXTO_MUTED()).width(16).height(16)
 }
 
 /// Copiado do FeatherSlide: largura 48, altura 42, hover neutro e fechamento vermelho.
 pub fn controles_janela<'a, M: Clone + 'static>(
     acoes: AcoesJanela<M>,
 ) -> Element<'a, M> {
-    let botao = |desenho: svg::Svg<'static, iced::Theme>, msg: M, fechar: bool| -> Element<'a, M> {
-        button(container(desenho).width(Length::Fill).height(Length::Fill)
-            .align_x(Alignment::Center).align_y(Alignment::Center))
-            .width(Length::Fixed(48.0))
-            .height(Length::Fixed(BARRA_ALTURA))
+    let botao = |desenho: SvgView, msg: M, fechar: bool, nome: &'static str| -> Element<'a, M> {
+        let b = button(container(desenho).center())
+            .width(48)
+            .height(BARRA_ALTURA)
             .padding(0)
             .style(move |_, status| {
-                let hover = matches!(status, button::Status::Hovered | button::Status::Pressed);
-                button::Style {
-                    background: Some(Background::Color(if hover {
-                        if fechar { Color::from_rgb8(0xe8, 0x11, 0x23) } else { COR_HOVER() }
-                    } else { Color::TRANSPARENT })),
-                    text_color: COR_TEXTO(),
-                    border: Border::default(),
-                    shadow: iced::Shadow::default(),
-                }
+                let hover = matches!(status, Status::Hovered | Status::Pressed);
+                let fundo = if !hover { Color::TRANSPARENT } else if fechar { Color::rgb8(0xe8, 0x11, 0x23) } else { COR_HOVER() };
+                Style::default().background(fundo).text_color(COR_TEXTO())
             })
-            .on_press(msg).into()
+            .on_press(msg);
+        Element::from(b).access_label(crate::idioma::t(nome))
     };
     container(row![
-        botao(icone_janela("<path d=\"M5 12h14\"/>"), acoes.minimizar, false),
-        botao(icone_janela("<rect x=\"5\" y=\"5\" width=\"14\" height=\"14\" rx=\"1\"/>"), acoes.maximizar, false),
-        botao(icone_janela("<path d=\"M18 6L6 18M6 6l12 12\"/>"), acoes.fechar, true),
+        botao(icone_janela("<path d=\"M5 12h14\"/>"), acoes.minimizar, false, "Minimizar"),
+        botao(icone_janela("<rect x=\"5\" y=\"5\" width=\"14\" height=\"14\" rx=\"1\"/>"), acoes.maximizar, false, "Maximizar"),
+        botao(icone_janela("<path d=\"M18 6L6 18M6 6l12 12\"/>"), acoes.fechar, true, "Fechar"),
     ]).style(estilo_container_topo).into()
 }
 
@@ -143,18 +133,17 @@ pub fn janela_com_barra<'a, M: Clone + 'static>(
 ) -> Element<'a, M> {
     let nome = container(row![
         text(titulo.to_owned()).size(13),
-        Space::with_width(Length::Fill),
-    ].align_y(Alignment::Center))
-        .padding([0, 14]).align_y(Alignment::Center)
-        .width(Length::Fill).height(Length::Fixed(BARRA_ALTURA))
+        horizontal_space(),
+    ].align(Align::Center))
+        .padding([0, 14]).align_y(Align::Center)
+        .width(Length::FILL).height(BARRA_ALTURA)
         .style(estilo_container_topo);
     let arrastar = acoes.arrastar.clone();
     let barra = row![
         mouse_area(nome).on_press(arrastar),
         controles_janela(acoes),
-    ].align_y(Alignment::Center);
-    let linha = container(Space::with_height(1)).width(Length::Fill).style(estilo_linha);
-    column![barra, linha, container(conteudo).width(Length::Fill).height(Length::Fill)].into()
+    ].align(Align::Center);
+    column![barra, linha(), container(conteudo).width(Length::FILL).height(Length::FILL)].into()
 }
 
 /// Combina uma barra de edição do app com os controles nativos desenhados.
@@ -167,8 +156,8 @@ pub fn barra_integrada<'a, M: Clone + 'static>(
         row![
             mouse_area(barra).on_press(arrastar),
             controles_janela(acoes),
-        ].align_y(Alignment::Center),
-        container(Space::with_height(1)).width(Length::Fill).style(estilo_linha),
+        ].align(Align::Center),
+        linha(),
     ].into()
 }
 
@@ -180,13 +169,13 @@ pub fn menu_arquivos<'a, M: Clone + 'a>(
     let mut itens = column![
         text(aplicativo.to_owned()).size(18),
         text(crate::idioma::t("Arquivos e ferramentas")).size(12).color(COR_TEXTO_MUTED()),
-        Space::with_height(8),
+        Space::new(0, 8),
     ].spacing(6);
     for (icone_nome, rotulo, mensagem) in opcoes {
         itens = itens.push(
             button(row![icone(icone_nome, 17.), text(rotulo).size(13)]
-                .spacing(10).align_y(Alignment::Center))
-                .width(Length::Fill).padding([9, 12])
+                .spacing(10).align(Align::Center))
+                .width(Length::FILL).padding([9, 12])
                 .style(estilo_botao_pequeno(false)).on_press(mensagem),
         );
     }
@@ -203,11 +192,27 @@ pub fn painel_utilitario<'a, M: Clone + 'a>(
     container(column![
         row![
             text(titulo.to_owned()).size(20),
-            Space::with_width(Length::Fill),
+            horizontal_space(),
             button(text(crate::idioma::t("Fechar")).size(12)).padding([6, 12])
                 .style(estilo_botao_secundario).on_press(fechar),
-        ].align_y(Alignment::Center),
+        ].align(Align::Center),
         conteudo,
-    ].spacing(14)).padding(22).width(Length::Fill)
+    ].spacing(14)).padding(22).width(Length::FILL)
         .style(estilo_painel_miniaturas).into()
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+    use pelicano::column;
+
+    #[test]
+    fn barras_montam_e_fazem_layout() {
+        let acoes = || AcoesJanela { arrastar: 0u8, minimizar: 1, maximizar: 2, fechar: 3 };
+        let barra = barra_editor("a.txt", true, Some(4u8), [Acao { icone: "x", dica: "Fechar", mensagem: None }], 5);
+        let tela = column![barra_integrada(barra, acoes()), janela_com_barra("Ajuda", menu_arquivos("Docs", [("x", "Sair", 6)]), acoes())];
+        let tela = moldura_janela(column![tela, painel_utilitario("F12", text("ok").into(), 7)].into());
+        let no = pelicano::layout(&tela, pelicano::Size::new(900.0, 700.0), &mut pelicano::Renderer::new(), &Default::default(), &crate::tema::tema());
+        assert_eq!(no.rect.width, 900.0);
+    }
 }

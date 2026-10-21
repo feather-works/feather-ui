@@ -1,5 +1,5 @@
-//! Normalização de atalhos Iced (sem conhecer os comandos dos aplicativos).
-use iced::keyboard::{key::Named, Key, Modifiers};
+//! Normalização de atalhos (sem conhecer os comandos dos aplicativos).
+use pelicano::{Key, Modifiers, NamedKey as Named};
 
 /// Ex.: Ctrl+Shift+S, F1, F12. Modificadores isolados não geram ações.
 pub fn combo_de(tecla: &Key, m: Modifiers) -> Option<String> {
@@ -10,9 +10,9 @@ pub fn combo_de(tecla: &Key, m: Modifiers) -> Option<String> {
         _ => return None,
     };
     let mut combo = String::new();
-    if m.control() { combo.push_str("Ctrl+"); }
-    if m.alt() { combo.push_str("Alt+"); }
-    if m.shift() { combo.push_str("Shift+"); }
+    if m.control_key() { combo.push_str("Ctrl+"); }
+    if m.alt_key() { combo.push_str("Alt+"); }
+    if m.shift_key() { combo.push_str("Shift+"); }
     combo.push_str(&nome);
     Some(combo)
 }
@@ -40,7 +40,7 @@ pub fn acao_global(tecla: &Key, modificadores: Modifiers) -> Option<AcaoGlobal> 
     match tecla {
         Key::Named(Named::F1) if modificadores == Modifiers::default() => Some(AcaoGlobal::Ajuda),
         Key::Named(Named::F12) if modificadores == Modifiers::default() => Some(AcaoGlobal::Monitor),
-        Key::Named(Named::F1) if modificadores == Modifiers::CTRL => Some(AcaoGlobal::AlternarFaixa),
+        Key::Named(Named::F1) if modificadores == Modifiers::CONTROL => Some(AcaoGlobal::AlternarFaixa),
         _ => None,
     }
 }
@@ -76,11 +76,11 @@ mod tests {
         let none = Modifiers::default();
         assert_eq!(acao_global(&Key::Named(Named::F1), none), Some(AcaoGlobal::Ajuda));
         assert_eq!(acao_global(&Key::Named(Named::F12), none), Some(AcaoGlobal::Monitor));
-        assert_eq!(acao_global(&Key::Named(Named::F1), Modifiers::CTRL), Some(AcaoGlobal::AlternarFaixa));
+        assert_eq!(acao_global(&Key::Named(Named::F1), Modifiers::CONTROL), Some(AcaoGlobal::AlternarFaixa));
         assert_eq!(acao_global(&Key::Named(Named::F1), Modifiers::SHIFT), None);
-        assert_eq!(acao_global(&Key::Named(Named::F1), Modifiers::CTRL | Modifiers::SHIFT), None);
+        assert_eq!(acao_global(&Key::Named(Named::F1), Modifiers::CONTROL | Modifiers::SHIFT), None);
         assert_eq!(acao_global(&Key::Named(Named::F12), Modifiers::ALT), None);
-        assert_eq!(acao_global(&Key::Character("s".into()), Modifiers::CTRL), None);
+        assert_eq!(acao_global(&Key::Character("s".into()), Modifiers::CONTROL), None);
     }
 
     #[test]
@@ -92,7 +92,7 @@ mod tests {
         assert!(!fechar_painel(PainelGlobal::Configuracoes, &Key::Named(Named::F1), none));
         assert!(fechar_painel(PainelGlobal::Configuracoes, &Key::Named(Named::Escape), none));
         assert!(fechar_painel(PainelGlobal::Monitor, &Key::Named(Named::Escape), Modifiers::SHIFT));
-        assert!(!fechar_painel(PainelGlobal::Monitor, &Key::Named(Named::F12), Modifiers::CTRL));
+        assert!(!fechar_painel(PainelGlobal::Monitor, &Key::Named(Named::F12), Modifiers::CONTROL));
     }
 
     #[test]
@@ -106,7 +106,7 @@ mod tests {
     fn atalhos_de_teclado() {
         assert_eq!(combo_de(&Key::Named(Named::F1), Modifiers::default()).as_deref(), Some("F1"));
         assert_eq!(combo_de(&Key::Named(Named::F12), Modifiers::default()).as_deref(), Some("F12"));
-        assert_eq!(combo_de(&Key::Character("s".into()), Modifiers::CTRL | Modifiers::SHIFT).as_deref(), Some("Ctrl+Shift+S"));
+        assert_eq!(combo_de(&Key::Character("s".into()), Modifiers::CONTROL | Modifiers::SHIFT).as_deref(), Some("Ctrl+Shift+S"));
         assert_eq!(combo_de(&Key::Named(Named::Shift), Modifiers::SHIFT), None);
     }
 }

@@ -4,7 +4,7 @@
 //!
 //! - **coluna esquerda (clara)**: XInput2 de *todos os mestres*
 //!   (`XI_ButtonPress/Release`, `XI_Motion`, `XI_Enter/Leave`,
-//!   `XI_TouchBegin/Update/End`) — o mesmo que o winit 0.30 (Iced 0.13)
+//!   `XI_TouchBegin/Update/End`) — o mesmo que o winit 0.30 (do pelicano)
 //!   seleciona na janela dele;
 //! - **coluna do meio (clara)**: XInput2 de *todos os dispositivos*
 //!   (inclui os escravos: a caneta, o mouse físico);
@@ -505,7 +505,7 @@ mod linux {
         println!(
             "\nComo ler: se a CANETA só aparece em XI_Motion/Enter, sem XI_ButtonPress de botão 1,\n\
              o toque não vira botão no X. Se aparece XI_ButtonPress com EMULADO, o winit descarta.\n\
-             Se aparece XI_TouchBegin, o Iced recebe toque (não clique)."
+             Se aparece XI_TouchBegin, a janela recebe toque (não clique)."
         );
         Ok(())
     }

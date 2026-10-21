@@ -1,5 +1,5 @@
 //! Contrato de interação para listas suspensas, independente dos documentos.
-//! A renderização, foco real, eventos de mouse e scroll são do Iced.
+//! A renderização, foco real, eventos de mouse e scroll são do pelicano.
 //! O estado guarda SOMENTE índices/consulta, nunca IDs ou comandos de negócio.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +88,7 @@ impl EstadoDropdown {
         }
     }
 
-    /// Alimenta um evento proveniente de qualquer widget Iced. `selecionado`
+    /// Alimenta um evento proveniente de qualquer widget. `selecionado`
     /// refere-se ao índice original e serve apenas para abrir no item atual.
     ///
     /// `linhas_visiveis` define o tamanho da janela de navegação/scroll;
@@ -200,9 +200,9 @@ impl EstadoDropdown {
     }
 }
 
-/// Esc, Enter e direção no Iced 0.13 sem obrigar cada app a repetir o mapeamento.
-pub fn evento_teclado(tecla: &iced::keyboard::Key) -> Option<EventoDropdown> {
-    use iced::keyboard::{key::Named, Key};
+/// Esc, Enter e direção sem obrigar cada app a repetir o mapeamento.
+pub fn evento_teclado(tecla: &pelicano::Key) -> Option<EventoDropdown> {
+    use pelicano::{Key, NamedKey as Named};
     match tecla {
         Key::Named(Named::ArrowUp) => Some(EventoDropdown::Cima),
         Key::Named(Named::ArrowDown) => Some(EventoDropdown::Baixo),
@@ -313,8 +313,8 @@ mod testes {
     }
 
     #[test]
-    fn teclas_iced_normalizadas() {
-        use iced::keyboard::{key::Named, Key};
+    fn teclas_normalizadas() {
+        use pelicano::{Key, NamedKey as Named};
         assert_eq!(evento_teclado(&Key::Named(Named::Escape)), Some(EventoDropdown::Escape));
         assert_eq!(evento_teclado(&Key::Named(Named::ArrowDown)), Some(EventoDropdown::Baixo));
         assert_eq!(evento_teclado(&Key::Character("x".into())), None);

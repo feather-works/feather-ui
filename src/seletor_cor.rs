@@ -1,9 +1,8 @@
 //! Seletor HSV + alfa compartilhado pelo FeatherWorks.
 //! Nasceu no FeatherSlide; não importa mensagens nem modelos de nenhum editor.
-use iced::mouse;
-use iced::widget::canvas::{self, event, gradient, Canvas, Fill, Frame, Geometry, Gradient, Path, Program, Stroke};
-use iced::widget::{button, column, container, row, text, text_input, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length, Point, Rectangle, Renderer, Shadow, Size, Theme, Vector};
+use pelicano::{button, column, container, program, row, text, text_input, Align, Background, Border, Captured, Color,
+    Element, Event, Length, MouseButton, Path, Point, Program, Rect, Renderer, Shadow, Size, Space, Stroke, Style, Theme};
+use std::f32::consts::FRAC_PI_2;
 use crate::tema::*;
 
 #[derive(Debug, Clone)]
@@ -72,15 +71,15 @@ pub fn rgba_para_hsva(c: [u8; 4], matiz_antes: f32) -> [f32; 4] {
 }
 
 /// Traduz o arrasto do mouse na área em (x, y) de 0 a 1; `None` se o evento não conta.
-fn arrasto(arrastando: &mut bool, ev: &canvas::Event, b: Rectangle, c: mouse::Cursor) -> Option<(f32, f32)> {
+fn arrasto(arrastando: &mut bool, ev: &Event, b: Rect, c: Option<Point>) -> Option<(f32, f32)> {
     let norm = |p: Point| (((p.x - b.x) / b.width).clamp(0.0, 1.0), ((p.y - b.y) / b.height).clamp(0.0, 1.0));
     match ev {
-        canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) if c.position_in(b).is_some() => {
+        Event::MousePressed(MouseButton::Left) if c.is_some_and(|p| b.contains(p)) => {
             *arrastando = true;
-            c.position().map(norm)
+            c.map(norm)
         }
-        canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if *arrastando => c.position().map(norm),
-        canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+        Event::CursorMoved(p) if *arrastando => Some(norm(*p)),
+        Event::MouseReleased(MouseButton::Left) => {
             *arrastando = false;
             None
         }
@@ -88,25 +87,24 @@ fn arrasto(arrastando: &mut bool, ev: &canvas::Event, b: Rectangle, c: mouse::Cu
     }
 }
 
-fn degrade_horizontal(w: f32, paradas: &[(f32, Color)]) -> Fill {
-    let mut l = gradient::Linear::new(Point::new(0.0, 0.0), Point::new(w, 0.0));
-    for (o, c) in paradas {
-        l = l.add_stop(*o, *c);
-    }
-    Fill::from(Gradient::Linear(l))
+fn degrade(r: &mut Renderer, area: Rect, angulo: f32, paradas: Vec<(f32, Color)>) {
+    r.fill_quad(area, Some(&Background::Linear { angle: angulo, stops: paradas }), Border::default(), None);
 }
 
-fn degrade_vertical(h: f32, paradas: &[(f32, Color)]) -> Fill {
-    let mut l = gradient::Linear::new(Point::new(0.0, 0.0), Point::new(0.0, h));
-    for (o, c) in paradas {
-        l = l.add_stop(*o, *c);
-    }
-    Fill::from(Gradient::Linear(l))
+fn cheio(r: &mut Renderer, area: Rect, c: Color) {
+    r.fill_quad(area, Some(&c.into()), Border::default(), None);
 }
 
-fn marcador(frame: &mut Frame, p: Point) {
-    frame.stroke(&Path::circle(p, 6.0), Stroke::default().with_color(Color::BLACK).with_width(3.0));
-    frame.stroke(&Path::circle(p, 6.0), Stroke::default().with_color(Color::WHITE).with_width(1.5));
+fn marcador(r: &mut Renderer, p: Point) {
+    if let Some(c) = Path::circle(p, 6.0) {
+        r.stroke_path(&c, &Stroke::new(3.0), Color::BLACK);
+        r.stroke_path(&c, &Stroke::new(1.5), Color::WHITE);
+    }
+}
+
+/// A alça das barras: faixa branca com fio preto.
+fn alca(r: &mut Renderer, area: Rect) {
+    r.fill_quad(area, Some(&Color::WHITE.into()), Border::default().color(Color::BLACK, 1.0), None);
 }
 
 /// O quadrado: saturação para a direita, brilho para cima.
@@ -117,21 +115,21 @@ struct Quadrado {
 impl Program<Evento> for Quadrado {
     type State = bool;
 
-    fn update(&self, estado: &mut bool, ev: canvas::Event, b: Rectangle, c: mouse::Cursor) -> (event::Status, Option<Evento>) {
-        match arrasto(estado, &ev, b, c) {
-            Some((x, y)) => (event::Status::Captured, Some(Evento::SaturacaoBrilho(x, 1.0 - y))),
-            None => (event::Status::Ignored, None),
+    fn update(&self, estado: &mut bool, ev: &Event, b: Rect, c: Option<Point>, publicar: &mut dyn FnMut(Evento)) -> Captured {
+        match arrasto(estado, ev, b, c) {
+            Some((x, y)) => {
+                publicar(Evento::SaturacaoBrilho(x, 1.0 - y));
+                Captured::Yes
+            }
+            None => Captured::No,
         }
     }
 
-    fn draw(&self, _: &bool, renderer: &Renderer, _: &Theme, b: Rectangle, _: mouse::Cursor) -> Vec<Geometry> {
-        let mut f = Frame::new(renderer, b.size());
-        let [r, g, bl] = hsv_para_rgb(self.hsva[0], 1.0, 1.0);
-        let pura = Color::from_rgb8(r, g, bl);
-        f.fill_rectangle(Point::ORIGIN, b.size(), degrade_horizontal(b.width, &[(0.0, Color::WHITE), (1.0, pura)]));
-        f.fill_rectangle(Point::ORIGIN, b.size(), degrade_vertical(b.height, &[(0.0, Color::TRANSPARENT), (1.0, Color::BLACK)]));
-        marcador(&mut f, Point::new(self.hsva[1] * b.width, (1.0 - self.hsva[2]) * b.height));
-        vec![f.into_geometry()]
+    fn draw(&self, _: &bool, r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
+        let [vr, vg, vb] = hsv_para_rgb(self.hsva[0], 1.0, 1.0);
+        degrade(r, b, 0.0, vec![(0.0, Color::WHITE), (1.0, Color::rgb8(vr, vg, vb))]);
+        degrade(r, b, FRAC_PI_2, vec![(0.0, Color::TRANSPARENT), (1.0, Color::BLACK)]);
+        marcador(r, Point::new(b.x + self.hsva[1] * b.width, b.y + (1.0 - self.hsva[2]) * b.height));
     }
 }
 
@@ -143,26 +141,26 @@ struct BarraMatiz {
 impl Program<Evento> for BarraMatiz {
     type State = bool;
 
-    fn update(&self, estado: &mut bool, ev: canvas::Event, b: Rectangle, c: mouse::Cursor) -> (event::Status, Option<Evento>) {
-        match arrasto(estado, &ev, b, c) {
-            Some((_, y)) => (event::Status::Captured, Some(Evento::Matiz((y * 360.0).min(359.99)))),
-            None => (event::Status::Ignored, None),
+    fn update(&self, estado: &mut bool, ev: &Event, b: Rect, c: Option<Point>, publicar: &mut dyn FnMut(Evento)) -> Captured {
+        match arrasto(estado, ev, b, c) {
+            Some((_, y)) => {
+                publicar(Evento::Matiz((y * 360.0).min(359.99)));
+                Captured::Yes
+            }
+            None => Captured::No,
         }
     }
 
-    fn draw(&self, _: &bool, renderer: &Renderer, _: &Theme, b: Rectangle, _: mouse::Cursor) -> Vec<Geometry> {
-        let mut f = Frame::new(renderer, b.size());
-        let paradas: Vec<(f32, Color)> = (0..=6)
+    fn draw(&self, _: &bool, r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
+        let paradas = (0..=6)
             .map(|i| {
-                let [r, g, bl] = hsv_para_rgb(i as f32 * 60.0, 1.0, 1.0);
-                (i as f32 / 6.0, Color::from_rgb8(r, g, bl))
+                let [vr, vg, vb] = hsv_para_rgb(i as f32 * 60.0, 1.0, 1.0);
+                (i as f32 / 6.0, Color::rgb8(vr, vg, vb))
             })
             .collect();
-        f.fill_rectangle(Point::ORIGIN, b.size(), degrade_vertical(b.height, &paradas));
-        let y = self.hsva[0] / 360.0 * b.height;
-        f.fill_rectangle(Point::new(0.0, (y - 2.0).max(0.0)), Size::new(b.width, 4.0), Color::WHITE);
-        f.stroke(&Path::rectangle(Point::new(0.5, (y - 2.0).max(0.0)), Size::new(b.width - 1.0, 4.0)), Stroke::default().with_color(Color::BLACK).with_width(1.0));
-        vec![f.into_geometry()]
+        degrade(r, b, FRAC_PI_2, paradas);
+        let y = (self.hsva[0] / 360.0 * b.height - 2.0).max(0.0);
+        alca(r, Rect::new(Point::new(b.x, b.y + y), Size::new(b.width, 4.0)));
     }
 }
 
@@ -174,37 +172,37 @@ struct BarraAlfa {
 impl Program<Evento> for BarraAlfa {
     type State = bool;
 
-    fn update(&self, estado: &mut bool, ev: canvas::Event, b: Rectangle, c: mouse::Cursor) -> (event::Status, Option<Evento>) {
-        match arrasto(estado, &ev, b, c) {
-            Some((x, _)) => (event::Status::Captured, Some(Evento::Alfa(x))),
-            None => (event::Status::Ignored, None),
+    fn update(&self, estado: &mut bool, ev: &Event, b: Rect, c: Option<Point>, publicar: &mut dyn FnMut(Evento)) -> Captured {
+        match arrasto(estado, ev, b, c) {
+            Some((x, _)) => {
+                publicar(Evento::Alfa(x));
+                Captured::Yes
+            }
+            None => Captured::No,
         }
     }
 
-    fn draw(&self, _: &bool, renderer: &Renderer, _: &Theme, b: Rectangle, _: mouse::Cursor) -> Vec<Geometry> {
-        let mut f = Frame::new(renderer, b.size());
-        xadrez(&mut f, b.size());
-        let [r, g, bl] = hsv_para_rgb(self.hsva[0], self.hsva[1], self.hsva[2]);
-        let (c0, c1) = (Color::from_rgba8(r, g, bl, 0.0), Color::from_rgb8(r, g, bl));
-        f.fill_rectangle(Point::ORIGIN, b.size(), degrade_horizontal(b.width, &[(0.0, c0), (1.0, c1)]));
-        let x = self.hsva[3] * b.width;
-        f.fill_rectangle(Point::new((x - 2.0).max(0.0), 0.0), Size::new(4.0, b.height), Color::WHITE);
-        f.stroke(&Path::rectangle(Point::new((x - 2.0).max(0.0), 0.5), Size::new(4.0, b.height - 1.0)), Stroke::default().with_color(Color::BLACK).with_width(1.0));
-        vec![f.into_geometry()]
+    fn draw(&self, _: &bool, r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
+        xadrez(r, b);
+        let [vr, vg, vb] = hsv_para_rgb(self.hsva[0], self.hsva[1], self.hsva[2]);
+        let c1 = Color::rgb8(vr, vg, vb);
+        degrade(r, b, 0.0, vec![(0.0, c1.alpha(0.0)), (1.0, c1)]);
+        let x = (self.hsva[3] * b.width - 2.0).max(0.0);
+        alca(r, Rect::new(Point::new(b.x + x, b.y), Size::new(4.0, b.height)));
     }
 }
 
 /// O xadrez cinza e branco que mostra o que é transparente.
-fn xadrez(f: &mut Frame, tamanho: Size) {
+fn xadrez(r: &mut Renderer, b: Rect) {
     let lado = 6.0;
-    f.fill_rectangle(Point::ORIGIN, tamanho, Color::WHITE);
-    let (colunas, linhas) = ((tamanho.width / lado).ceil() as i32, (tamanho.height / lado).ceil() as i32);
+    cheio(r, b, Color::WHITE);
+    let (colunas, linhas) = ((b.width / lado).ceil() as i32, (b.height / lado).ceil() as i32);
     for l in 0..linhas {
         for c in 0..colunas {
             if (l + c) % 2 == 1 {
-                let w = lado.min(tamanho.width - c as f32 * lado);
-                let h = lado.min(tamanho.height - l as f32 * lado);
-                f.fill_rectangle(Point::new(c as f32 * lado, l as f32 * lado), Size::new(w, h), Color::from_rgb8(0xcc, 0xcc, 0xcc));
+                let w = lado.min(b.width - c as f32 * lado);
+                let h = lado.min(b.height - l as f32 * lado);
+                cheio(r, Rect::new(Point::new(b.x + c as f32 * lado, b.y + l as f32 * lado), Size::new(w, h)), Color::rgb8(0xcc, 0xcc, 0xcc));
             }
         }
     }
@@ -218,18 +216,15 @@ struct Previa {
 impl<M> Program<M> for Previa {
     type State = ();
 
-    fn draw(&self, _: &(), renderer: &Renderer, _: &Theme, b: Rectangle, _: mouse::Cursor) -> Vec<Geometry> {
-        let mut f = Frame::new(renderer, b.size());
-        xadrez(&mut f, b.size());
-        f.fill_rectangle(Point::ORIGIN, b.size(), self.cor);
-        vec![f.into_geometry()]
+    fn draw(&self, _: &(), r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
+        xadrez(r, b);
+        cheio(r, b, self.cor);
     }
 }
 
-
 fn cor(hex: &str) -> Color {
-    let [r,g,b,a] = rgba_de(hex);
-    Color::from_rgba8(r,g,b,a as f32/255.0)
+    let [r, g, b, a] = rgba_de(hex);
+    Color::rgb8(r, g, b).alpha(a as f32 / 255.0)
 }
 const PRONTAS: [&str; 12] = [
     "#000000", "#666666", "#cccccc", "#ffffff", "#d93025", "#f29900",
@@ -251,40 +246,31 @@ pub fn painel_embutido<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], tex
 fn painel_base<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], texto_hex: &str, embutido: bool) -> Element<'a, Evento> {
     const LARGURA: f32 = 264.0;
     let rgba = rgba_de(atual);
-    let quadrado = Canvas::new(Quadrado { hsva })
-        .width(Length::Fill).height(Length::Fixed(150.0));
-    let matiz = Canvas::new(BarraMatiz { hsva })
-        .width(Length::Fixed(16.0)).height(Length::Fixed(150.0));
-    let alfa = Canvas::new(BarraAlfa { hsva })
-        .width(Length::Fill).height(Length::Fixed(14.0));
-    let previa = Canvas::new(Previa {
+    let quadrado = program(Quadrado { hsva }).width(Length::FILL).height(150.0);
+    let matiz = program(BarraMatiz { hsva }).width(16.0).height(150.0);
+    let alfa = program(BarraAlfa { hsva }).width(Length::FILL).height(14.0);
+    let previa = program(Previa {
         cor: if atual.is_empty() { Color::TRANSPARENT } else { cor(atual) }
-    }).width(Length::Fixed(34.0)).height(Length::Fixed(34.0));
+    }).width(34.0).height(34.0);
 
     let campo = |rotulo: &'static str, i: usize| -> Element<'a, Evento> {
         column![
-            text_input("", &rgba[i].to_string())
+            text_input("", rgba[i].to_string())
                 .on_input(move |t| Evento::Canal(i, t))
-                .size(12).padding([3, 4]).width(Length::Fill),
+                .size(12).padding([3, 4]).width(Length::FILL),
             text(rotulo).size(10).color(COR_TEXTO_MUTED()),
-        ].spacing(2).align_x(Alignment::Center).width(Length::Fill).into()
+        ].spacing(2).align(Align::Center).width(Length::FILL).into()
     };
 
     let prontas = row(PRONTAS.iter().map(|hex| {
         let c = cor(hex);
         let escolhida = atual.eq_ignore_ascii_case(hex);
         Element::from(
-            button(Space::new(Length::Fixed(16.0), Length::Fixed(16.0)))
+            button(Space::new(16.0, 16.0))
                 .padding(0)
-                .style(move |_, _| button::Style {
-                    background: Some(Background::Color(c)),
-                    border: Border {
-                        color: if escolhida { COR_AZUL_ACENTO() } else { COR_BORDA() },
-                        width: if escolhida { 2.0 } else { 1.0 },
-                        radius: 8.0.into(),
-                    },
-                    ..Default::default()
-                })
+                .style(move |_, _| Style::default().background(c).border(
+                    Border::rounded(8.0).color(if escolhida { COR_AZUL_ACENTO() } else { COR_BORDA() }, if escolhida { 2.0 } else { 1.0 }),
+                ))
                 .on_press(Evento::Escolhida(hex.to_string()))
         )
     })).spacing(4);
@@ -293,24 +279,24 @@ fn painel_base<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], texto_hex: 
         button(text(crate::idioma::t("Sem cor")).size(12)).padding([5, 9])
             .style(estilo_botao_pequeno(atual.is_empty()))
             .on_press(Evento::Escolhida(String::new())),
-    ].align_y(Alignment::Center).spacing(8);
+    ].align(Align::Center).spacing(8);
     if !embutido {
-        rodape = rodape.push(Space::with_width(Length::Fill))
+        rodape = rodape.push(Space::new(Length::FILL, 0.0))
             .push(button(text(crate::idioma::t("Fechar")).size(12)).padding([5, 9])
                 .style(estilo_botao_pequeno(false)).on_press(Evento::Fechar));
     }
     let conteudo = column![
         text(titulo).size(12).color(COR_TEXTO_MUTED()),
-        row![quadrado, matiz].spacing(8).height(Length::Fixed(150.0)),
+        row![quadrado, matiz].spacing(8).height(150.0),
         alfa,
         row![previa, text(crate::idioma::t("Prévia")).size(11).color(COR_TEXTO_MUTED())]
-            .spacing(10).align_y(Alignment::Center),
+            .spacing(10).align(Align::Center),
         row![
             column![
-                text_input("#rrggbb", texto_hex).on_input(Evento::TextoHex)
-                    .size(12).padding([3, 4]).width(Length::Fill),
+                text_input("#rrggbb", texto_hex.to_owned()).on_input(Evento::TextoHex)
+                    .size(12).padding([3, 4]).width(Length::FILL),
                 text("Hex").size(10).color(COR_TEXTO_MUTED()),
-            ].spacing(2).align_x(Alignment::Center).width(Length::FillPortion(3)),
+            ].spacing(2).align(Align::Center).width(Length::Fill(3)),
             campo("R", 0), campo("G", 1), campo("B", 2), campo("A", 3),
         ].spacing(6),
         prontas,
@@ -318,17 +304,13 @@ fn painel_base<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], texto_hex: 
     ].spacing(10);
 
     container(conteudo).padding(12)
-        .width(Length::Fixed(LARGURA))
-        .style(|_| container::Style {
-            background: Some(Background::Color(COR_PAINEL())),
-            text_color: Some(COR_TEXTO()),
-            border: Border { color: COR_BORDA(), width: 1.0, radius: 10.0.into() },
-            shadow: Shadow {
-                color: Color::from_rgba8(0, 0, 0, 0.3),
-                offset: Vector::new(0.0, 6.0),
-                blur_radius: 18.0,
-            },
-        }).into()
+        .width(LARGURA)
+        .style(|_| Style::default()
+            .background(COR_PAINEL())
+            .text_color(COR_TEXTO())
+            .border(Border::rounded(10.0).color(COR_BORDA(), 1.0))
+            .shadow(Shadow { color: Color::BLACK.alpha(0.3), offset: Point::new(0.0, 6.0), blur: 18.0 }))
+        .into()
 }
 
 #[cfg(test)]
@@ -336,7 +318,43 @@ mod testes {
     use super::*;
     #[test]
     fn seletor_embutido_mantem_eventos_hsv() {
-        let _: Element<'_, Evento> = painel_embutido("Cor", "#00ff00", [120.,1.,1.,1.], "#00ff00");
+        let e: Element<'_, Evento> = painel_embutido("Cor", "#00ff00", [120.,1.,1.,1.], "#00ff00");
+        let png = pelicano::capture(&e, Size::new(300.0, 420.0), 1.0, &Theme::light(), &mut Renderer::new(), None);
+        assert!(!png.is_empty());
+        let _ = painel("Cor", "#ff000080", [0., 1., 1., 0.5], "#ff000080");
+    }
+
+    fn arrastar<P: Program<Evento, State = bool>>(p: &P) -> Vec<Evento> {
+        let b = Rect::new(Point::new(10.0, 20.0), Size::new(100.0, 50.0));
+        let (mut st, mut fora) = (false, Vec::new());
+        let mut pub_ = |e| fora.push(e);
+        // Clique fora não começa arrasto; dentro começa; mover arrasta mesmo saindo da área.
+        assert_eq!(p.update(&mut st, &Event::MousePressed(MouseButton::Left), b, Some(Point::new(0.0, 0.0)), &mut pub_), Captured::No);
+        assert!(!st);
+        assert_eq!(p.update(&mut st, &Event::MousePressed(MouseButton::Left), b, Some(Point::new(35.0, 30.0)), &mut pub_), Captured::Yes);
+        assert!(st);
+        p.update(&mut st, &Event::CursorMoved(Point::new(500.0, 500.0)), b, Some(Point::new(500.0, 500.0)), &mut pub_);
+        p.update(&mut st, &Event::MouseReleased(MouseButton::Left), b, None, &mut pub_);
+        assert!(!st);
+        assert_eq!(p.update(&mut st, &Event::CursorMoved(Point::new(40.0, 40.0)), b, None, &mut pub_), Captured::No);
+        fora
+    }
+
+    #[test]
+    fn programas_arrastam_e_publicam() {
+        let hsva = [0.0, 1.0, 1.0, 1.0];
+        let q = arrastar(&Quadrado { hsva });
+        assert!(matches!(q[..], [Evento::SaturacaoBrilho(x, y), Evento::SaturacaoBrilho(1.0, 0.0)]
+            if (x - 0.25).abs() < 1e-6 && (y - 0.8).abs() < 1e-6));
+        let m = arrastar(&BarraMatiz { hsva });
+        assert!(matches!(m[..], [Evento::Matiz(h), Evento::Matiz(f)] if (h - 72.0).abs() < 1e-3 && f == 359.99));
+        let a = arrastar(&BarraAlfa { hsva });
+        assert!(matches!(a[..], [Evento::Alfa(x), Evento::Alfa(1.0)] if (x - 0.25).abs() < 1e-6));
+        // A prévia só desenha: não publica nada.
+        let mut fora: Vec<Evento> = Vec::new();
+        let c = Program::<Evento>::update(&Previa { cor: Color::WHITE }, &mut (), &Event::MousePressed(MouseButton::Left),
+            Rect::new(Point::ORIGIN, Size::new(10.0, 10.0)), Some(Point::new(5.0, 5.0)), &mut |e| fora.push(e));
+        assert!(c == Captured::No && fora.is_empty());
     }
     #[test]
     fn cores_hsv_transparencia_e_validacao() {

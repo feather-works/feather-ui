@@ -1,6 +1,6 @@
-//! Controles visuais de efeitos de imagem compartilhados nos aplicativos Iced.
+//! Controles visuais de efeitos de imagem compartilhados nos aplicativos.
 //! Nenhuma dependência de motores: devolve apenas a chave escolhida ao consumidor.
-use iced::{Element, widget::{button, column, row, text}};
+use pelicano::{button, column, row, text, Element};
 use crate::{formatacao, tema};
 
 /// As chaves estáveis são interpretadas por `featheroffice-image::EfeitoRapido`

@@ -1,11 +1,10 @@
-//! Modelos de Ribbon e menus reutilizáveis pela suíte Iced.
+//! Modelos de Ribbon e menus reutilizáveis pela suíte.
 //! Este crate conhece mensagens visuais, jamais os comandos/documentos de cada app.
 //!
 //! `AbaRibbon`, `GrupoRibbon` e `ItemMenu` são descritores; as aplicações
 //! podem renderizar seus controles existentes sem trocar o estado de domínio.
 
-use iced::widget::{button, column, row, text, Space};
-use iced::{Element, Length};
+use pelicano::{button, column, container, row, text, Align, Element, Font, Length, Space};
 
 /// Aba com identidade do consumidor (enum próprio do Slide/Docs/Sheet).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,14 +162,11 @@ pub fn aba_com_padding<'a, I, M>(
     padding_lateral: f32,
 ) -> Element<'a, M>
 where I: Clone + PartialEq, M: Clone + 'a {
-    if !item.visivel { return Space::with_width(0).into(); }
+    if !item.visivel { return Space::new(0, 0).into(); }
     let ativa = &item.id == selecionada;
     let titulo = text(item.rotulo.clone()).size(13)
-        .wrapping(iced::widget::text::Wrapping::None)
-        .font(iced::Font {
-            weight: if ativa { iced::font::Weight::Semibold } else { iced::font::Weight::Normal },
-            ..iced::Font::DEFAULT
-        });
+        .no_wrap()
+        .font(if ativa { Font::SEMIBOLD } else { Font::DEFAULT });
     button(titulo)
         .padding([7.0, padding_lateral])
         .style(crate::tema::estilo_aba_faixa(ativa))
@@ -207,7 +203,7 @@ pub fn ferramentas<'a, M: Clone + 'a>(grupos: &[GrupoRibbon<M>]) -> Element<'a, 
         }
         barra = barra.push(
             row![
-                iced::widget::container(
+                container(
                     column![
                         botoes,
                         text(grupo.rotulo.clone())
@@ -215,11 +211,11 @@ pub fn ferramentas<'a, M: Clone + 'a>(grupos: &[GrupoRibbon<M>]) -> Element<'a, 
                             .color(crate::tema::COR_TEXTO_MUTED()),
                     ]
                     .spacing(2)
-                    .align_x(iced::Alignment::Center),
+                    .align(Align::Center),
                 )
                 .padding([4, 12]),
-                iced::widget::container(Space::with_width(1))
-                    .height(Length::Fill)
+                container(Space::new(1, Length::FILL))
+                    .height(Length::FILL)
                     .style(crate::tema::estilo_linha),
             ],
         );
@@ -241,7 +237,7 @@ pub fn menu<'a, M: Clone + 'a>(
     itens: &[ItemMenu<M>],
     estado: &EstadoMenuRibbon,
 ) -> Element<'a, EventoMenu<M>> {
-    if !estado.aberto { return Space::with_height(0).into(); }
+    if !estado.aberto { return Space::new(0, 0).into(); }
     let mut lista = column![].spacing(2);
     let mut nivel = itens;
     let mut pai: Vec<usize> = Vec::new();

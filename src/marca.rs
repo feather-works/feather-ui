@@ -1,6 +1,6 @@
 //! Marca vetorial única. A cor da fábrica pertence ao aplicativo;
 //! aparência Claro/Escuro/Automático não altera a logo sem opção explícita.
-use iced::widget::svg;
+use pelicano::{Icon, Settings, SvgView};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use crate::tema;
 
@@ -35,12 +35,12 @@ pub fn id_aplicativo()->&'static str {
     }
 }
 
-static ICONE_JANELA: std::sync::OnceLock<iced::window::Icon>=std::sync::OnceLock::new();
+static ICONE_JANELA: std::sync::OnceLock<Icon>=std::sync::OnceLock::new();
 
 /// Ícone das janelas do aplicativo (barra de título e de tarefas no Windows e
 /// no X11). O aplicativo registra uma vez, no começo; vale para todas as janelas
 /// abertas por [`preparar_janela`].
-pub fn definir_icone_janela(icone:iced::window::Icon) {
+pub fn definir_icone_janela(icone:Icon) {
     let _=ICONE_JANELA.set(icone);
 }
 
@@ -48,9 +48,8 @@ pub fn definir_icone_janela(icone:iced::window::Icon) {
 /// liga a janela ao `.desktop` instalado, ao nome e ao ícone no painel e no
 /// gerenciador de tarefas; sem ele a janela aparece como "Processos do Sistema")
 /// e o ícone registrado por [`definir_icone_janela`].
-pub fn preparar_janela(mut ajustes:iced::window::Settings)->iced::window::Settings {
-    #[cfg(target_os="linux")]
-    { ajustes.platform_specific.application_id=id_aplicativo().to_owned(); }
+pub fn preparar_janela(mut ajustes:Settings)->Settings {
+    if ajustes.app_id.is_none() { ajustes.app_id=Some(id_aplicativo().to_owned()); }
     if ajustes.icon.is_none() { ajustes.icon=ICONE_JANELA.get().cloned(); }
     ajustes
 }
@@ -81,32 +80,28 @@ pub fn svg_para(produto:Produto,personalizada:bool)->String {
         .replace("#e8f4eb",&clarear(cor,0.88))
         .replace("#e4f0e7",&clarear(cor,0.85))
 }
-/// Para uso pelo Iced, garantimos um canvas **opaco** na cor real da
+/// Para a tela, garantimos um canvas **opaco** na cor real da
 /// superfície. Os cantos do retângulo arredondado continuam visualmente
 /// transparentes, mas não há pixels com alfa parcial para o backend de SVG
 /// compor contra preto (franja escura nos quatro cantos, especialmente em
 /// escala fracionária). Os arquivos SVG distribuídos permanecem transparentes.
-fn svg_para_iced(produto:Produto, personalizada:bool)->String {
+fn svg_opaco(produto:Produto, personalizada:bool)->String {
     let svg=svg_para(produto,personalizada);
     let bg=tema::COR_PAINEL();
     let canal=|v:f32| -> u8 {(v.clamp(0.,1.)*255.).round() as u8};
     let cor=format!("#{:02x}{:02x}{:02x}",canal(bg.r),canal(bg.g),canal(bg.b));
     let fundo=format!(
-        r#"<rect id="fundo-opaco-iced" x="0" y="0" width="128" height="128" fill="{cor}"/>"#
+        r#"<rect id="fundo-opaco" x="0" y="0" width="128" height="128" fill="{cor}"/>"#
     );
     // A inserção fica antes do fundo com cantos arredondados: a geometria
     // original, o degradê e as duas penas não são modificados.
     svg.replacen("<rect id=\"fundo-arredondado\"", 
         &format!("{fundo}\n  <rect id=\"fundo-arredondado\""), 1)
 }
-pub fn icone_para(produto:Produto,personalizada:bool,tamanho:f32)
-    ->svg::Svg<'static,iced::Theme>
-{
-    svg::Svg::new(svg::Handle::from_memory(
-        svg_para_iced(produto,personalizada).into_bytes()
-    )).width(tamanho).height(tamanho)
+pub fn icone_para(produto:Produto,personalizada:bool,tamanho:f32)->SvgView {
+    pelicano::svg(crate::icones::carregar(svg_opaco(produto,personalizada))).width(tamanho).height(tamanho)
 }
-pub fn icone_atual(tamanho:f32)->svg::Svg<'static,iced::Theme> {
+pub fn icone_atual(tamanho:f32)->SvgView {
     icone_para(produto_atual(),COR_PERSONALIZADA.load(Ordering::Relaxed),tamanho)
 }
 #[cfg(test)]
@@ -139,13 +134,13 @@ mod testes {
         assert!(svg_para(Produto::FeatherSheet,false).contains("#287846"));
     }
     #[test]
-    fn renderizacao_iced_cobre_cantos_transparentes_sem_borda_preta() {
+    fn renderizacao_cobre_cantos_transparentes_sem_borda_preta() {
         for produto in [Produto::FeatherSheet,Produto::FeatherDocs,Produto::FeatherSlide] {
             let original=svg_para(produto,false);
-            let rendered=svg_para_iced(produto,false);
-            assert!(!original.contains("fundo-opaco-iced"),
+            let rendered=svg_opaco(produto,false);
+            assert!(!original.contains("fundo-opaco"),
                 "Os SVGs editáveis devem manter a transparência original.");
-            let fundo=rendered.find("id=\"fundo-opaco-iced\"")
+            let fundo=rendered.find("id=\"fundo-opaco\"")
                 .expect("O rasterizador precisa receber um fundo opaco.");
             let arredondado=rendered.find("id=\"fundo-arredondado\"")
                 .expect("Os cantos originais permanecem arredondados.");
@@ -156,8 +151,9 @@ mod testes {
         }
     }
     #[test]
-    fn svg_instanciavel_com_iced_sem_png_ou_arquivo_de_rede() {
-        let _:svg::Svg<'static,iced::Theme>=icone_para(Produto::FeatherSheet,false,24.);
-        let _:svg::Svg<'static,iced::Theme>=icone_para(Produto::FeatherDocs,false,72.);
+    fn svg_instanciavel_sem_png_ou_arquivo_de_rede() {
+        let _:SvgView=icone_para(Produto::FeatherSheet,false,24.);
+        let _:SvgView=icone_para(Produto::FeatherDocs,false,72.);
+        assert_eq!(preparar_janela(Settings::default()).app_id.as_deref(),Some(id_aplicativo()));
     }
 }

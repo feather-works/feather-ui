@@ -1,4 +1,4 @@
-//! Teste da caneta falando DIRETO com o compositor Wayland — sem Iced e sem winit.
+//! Teste da caneta falando DIRETO com o compositor Wayland — sem pelicano e sem winit.
 //!
 //! Abre uma janela xdg-toplevel com buffer shm, faz bind de `wl_seat`,
 //! `wl_pointer` e `zwp_tablet_manager_v2` (protocolo tablet-v2) e imprime cada

@@ -11,7 +11,8 @@ dentro do próprio executável. Quem instala só a planilha não precisa instala
 
 ## Por que ela existe
 
-Os aplicativos são escritos em Rust com [Iced](https://iced.rs). O Iced dá os
+Os aplicativos são escritos em Rust com o [pelicano](https://github.com/feather-works/pelicano),
+a biblioteca de interface da própria suíte (até a v0.2.10, com o Iced). O pelicano dá os
 blocos básicos (botão, texto, rolagem); ele não diz como uma ferramenta do
 FeatherWorks deve parecer nem se comportar. Sem uma peça comum, cada
 aplicativo reinventaria a própria faixa de opções, o próprio tema escuro e os
@@ -47,7 +48,7 @@ desfazer/refazer ficam nos motores de cada aplicativo; aqui fica só o desenho.
   de fábrica por aplicativo (FeatherSheet verde, FeatherDocs azul,
   FeatherSlide amarelo), que acompanha a cor de destaque quando a pessoa
   escolhe uma.
-- **Sem dependências além do Iced**, para compilar rápido e não arrastar
+- **Sem dependências além do pelicano**, para compilar rápido e não arrastar
   bibliotecas em C para os aplicativos.
 - **Privacidade**: nenhum componente faz acesso à rede nem telemetria.
 
@@ -98,7 +99,7 @@ Os desenhos específicos adicionais estão disponíveis como `editar_dinamica`,
 | `creditos` | bloco "Colaboradores" do Sobre, igual em todos os aplicativos |
 | `tinta` | aba Desenhar: camada transparente de tinta (captura caneta/mouse, desenha, devolve traço/apagar/laço em coordenadas do documento) e os controles das canetas; o motor dos traços fica no `featheroffice-drawing` |
 | `caneta` | pressão da caneta para a camada de tinta: `FontePressao` (amostras com instante, casamento por tempo), XInput2 no Linux pelo `x11rb` (Rust puro; só eventos crus dos dispositivos com eixo de pressão, nunca teclado; sob Wayland o app precisa abrir pelo XWayland, ver `deve_usar_x11`/`mesas_conectadas`: no Wayland o winit 0.30 não recebe o clique da caneta), WM_POINTER no Windows, e o diário de diagnóstico. Exemplo: `cargo run --example caneta_diag -- 15` |
-| `texto_contorno` | contorno das letras pela fonte do Iced (`contornos(&Text)`, miolos preservados) e `contornos_deformados` com a deformação passada como função — o WordArt de qualquer app usa com `feather_shapes::wordart::transformar`, sem o `feather-ui` depender do `feather-shapes` |
+| `texto_contorno` | contorno das letras pela fonte do pelicano (`contornos`, miolos preservados) e `contornos_deformados` com a deformação passada como função — o WordArt de qualquer app usa com `feather_shapes::wordart::transformar`, sem o `feather-ui` depender do `feather-shapes` |
 
 ## Como usar
 
@@ -106,7 +107,7 @@ No `Cargo.toml` do aplicativo:
 
 ```toml
 [dependencies]
-feather-ui = { git = "https://github.com/feather-works/feather-ui", tag = "v0.2.9" }
+feather-ui = { git = "https://github.com/feather-works/feather-ui", tag = "v0.3.0" }
 ```
 
 Para desenvolver a biblioteca e o aplicativo lado a lado, aponte para a cópia

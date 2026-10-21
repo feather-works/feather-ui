@@ -4,27 +4,24 @@
 //! 13 de 15 toques no relato de 19/10/2026), mas a leitura por fora
 //! ([`crate::caneta`]) sabe onde a ponta encostou e quando levantou. Este
 //! invólucro, posto na raiz da janela, entrega esses toques aos widgets
-//! como `ButtonPressed`/`ButtonReleased(Left)` — por dentro do app, sem
+//! como `MousePressed`/`MouseReleased(Left)` — por dentro do app, sem
 //! simular mouse no sistema (o XTest pedia a permissão de área de trabalho
 //! remota ao GNOME).
 //!
 //! Uso: `clique_caneta(conteudo, fonte.as_ref())` em volta do `view` da
-//! janela que a leitura acompanha. Os toques chegam acordando o app pela
-//! [`crate::caneta::assinatura_toques`]; o app precisa ouvi-la.
+//! janela que a leitura acompanha. Os toques chegam pela
+//! [`crate::caneta::assinatura_toques`]; ao receber cada lote, o app devolve
+//! [`entregar_cliques`] para os widgets verem o toque na hora.
 //!
-//! Quando o Iced recebe o clique da própria caneta, ele vence e o toque
-//! não é repetido; enquanto o clique é o do invólucro, o que vier do Iced
+//! Quando a janela recebe o clique da própria caneta, ele vence e o toque
+//! não é repetido; enquanto o clique é o do invólucro, o que vier da janela
 //! para o botão esquerdo é descartado (não duplica).
 use crate::caneta::{FaseToque, FontePressao, ToqueCaneta};
-use iced::advanced::layout::{self, Layout};
-use iced::advanced::overlay;
-use iced::advanced::renderer;
-use iced::advanced::widget::{tree, Operation, Tree, Widget};
-use iced::advanced::{Clipboard, Shell};
-use iced::{event, mouse, Element, Event, Length, Point, Rectangle, Size, Vector};
+use pelicano::widget::{dispatch, DrawCx, EventCx, LayoutCx, Limits, Node, Widget};
+use pelicano::{Captured, Element, Event, Length, MouseButton, Point, Task, WindowId};
 use std::time::{Duration, Instant};
 
-/// Clique do Iced que chega até este tempo antes do toque é o da caneta.
+/// Clique da janela que chega até este tempo antes do toque é o da caneta.
 const JANELA_REAL: Duration = Duration::from_millis(150);
 
 /// Quem está fazendo o clique da ponta encostada agora.
@@ -32,9 +29,9 @@ const JANELA_REAL: Duration = Duration::from_millis(150);
 enum Modo {
     #[default]
     Livre,
-    /// O invólucro: o botão esquerdo do Iced é descartado até levantar.
+    /// O invólucro: o botão esquerdo da janela é descartado até levantar.
     Sintetico,
-    /// O próprio Iced recebeu o aperto da caneta.
+    /// A própria janela recebeu o aperto da caneta.
     Real,
 }
 
@@ -43,16 +40,13 @@ struct Estado {
     modo: Modo,
     real_em: Option<Instant>,
     real_soltou: bool,
-    /// Eventos do ciclo atual: entregues ao overlay (se houver) e depois à
-    /// base. `None` no cursor = o overlay capturou.
-    lote: Vec<(mouse::Event, Option<mouse::Cursor>)>,
 }
 
 impl Estado {
     /// Converte um toque da ponta em eventos de mouse.
-    fn traduzir(&mut self, toque: &ToqueCaneta, agora: Instant) -> Vec<mouse::Event> {
-        let mover = mouse::Event::CursorMoved { position: toque.posicao };
-        let esquerdo = mouse::Button::Left;
+    fn traduzir(&mut self, toque: &ToqueCaneta, agora: Instant) -> Vec<Event> {
+        let mover = Event::CursorMoved(toque.posicao);
+        let esquerdo = MouseButton::Left;
         match toque.fase {
             FaseToque::Encostou => {
                 if self.real_em.is_some_and(|t| agora.saturating_duration_since(t) <= JANELA_REAL) {
@@ -60,15 +54,15 @@ impl Estado {
                     return Vec::new();
                 }
                 self.modo = Modo::Sintetico;
-                vec![mover, mouse::Event::ButtonPressed(esquerdo)]
+                vec![mover, Event::MousePressed(esquerdo)]
             }
             FaseToque::Moveu if self.modo == Modo::Sintetico => vec![mover],
             FaseToque::Moveu => Vec::new(),
             FaseToque::Levantou => {
                 let eventos = match self.modo {
-                    Modo::Sintetico => vec![mover, mouse::Event::ButtonReleased(esquerdo)],
-                    // O Iced apertou e não soltou: o botão só age na soltura.
-                    Modo::Real if !self.real_soltou => vec![mouse::Event::ButtonReleased(esquerdo)],
+                    Modo::Sintetico => vec![mover, Event::MouseReleased(esquerdo)],
+                    // A janela apertou e não soltou: o botão só age na soltura.
+                    Modo::Real if !self.real_soltou => vec![Event::MouseReleased(esquerdo)],
                     _ => Vec::new(),
                 };
                 self.modo = Modo::Livre;
@@ -78,248 +72,95 @@ impl Estado {
         }
     }
 
-    /// Um evento do Iced passa? Durante o clique do invólucro, o botão
+    /// Um evento da janela passa? Durante o clique do invólucro, o botão
     /// esquerdo real é descartado.
     fn real_passa(&self, evento: &Event) -> bool {
         !(self.modo == Modo::Sintetico && e_esquerdo(evento))
     }
 
-    /// Anota o botão esquerdo real que passou (só a base chama: uma vez por evento).
+    /// Anota o botão esquerdo real que passou.
     fn anotar_real(&mut self, evento: &Event, agora: Instant) {
         match evento {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+            Event::MousePressed(MouseButton::Left) => {
                 self.real_em = Some(agora);
                 self.real_soltou = false;
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => self.real_soltou = true,
+            Event::MouseReleased(MouseButton::Left) => self.real_soltou = true,
             _ => {}
-        }
-    }
-
-    fn recolher(&mut self, fonte: &FontePressao, cursor: impl Fn(Point) -> Option<mouse::Cursor>) {
-        let agora = Instant::now();
-        for toque in fonte.recolher_cliques() {
-            for evento in self.traduzir(&toque, agora) {
-                self.lote.push((evento, cursor(toque.posicao)));
-            }
         }
     }
 }
 
 fn e_esquerdo(evento: &Event) -> bool {
-    matches!(
-        evento,
-        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left) | mouse::Event::ButtonReleased(mouse::Button::Left))
-    )
+    matches!(evento, Event::MousePressed(MouseButton::Left) | Event::MouseReleased(MouseButton::Left))
 }
 
 /// Ver o módulo.
-pub struct CliqueCaneta<'a, Message, Theme, Renderer> {
-    conteudo: Element<'a, Message, Theme, Renderer>,
+pub struct CliqueCaneta<'a, M> {
+    conteudo: Element<'a, M>,
     fonte: Option<FontePressao>,
 }
 
 /// Embrulha a raiz da janela. Sem `fonte` (leitura desligada), só repassa.
-pub fn clique_caneta<'a, Message, Theme, Renderer>(
-    conteudo: impl Into<Element<'a, Message, Theme, Renderer>>,
-    fonte: Option<&FontePressao>,
-) -> CliqueCaneta<'a, Message, Theme, Renderer> {
+pub fn clique_caneta<'a, M: 'a>(conteudo: impl Into<Element<'a, M>>, fonte: Option<&FontePressao>) -> CliqueCaneta<'a, M> {
     CliqueCaneta { conteudo: conteudo.into(), fonte: fonte.cloned() }
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer> for CliqueCaneta<'a, Message, Theme, Renderer>
-where
-    Renderer: renderer::Renderer,
-{
-    fn size(&self) -> Size<Length> {
-        self.conteudo.as_widget().size()
-    }
-
-    fn size_hint(&self) -> Size<Length> {
-        self.conteudo.as_widget().size_hint()
-    }
-
-    fn layout(&self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
-        self.conteudo.as_widget().layout(&mut tree.children[0], renderer, limits)
-    }
-
-    fn draw(
-        &self,
-        tree: &Tree,
-        renderer: &mut Renderer,
-        theme: &Theme,
-        style: &renderer::Style,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        viewport: &Rectangle,
-    ) {
-        self.conteudo.as_widget().draw(&tree.children[0], renderer, theme, style, layout, cursor, viewport);
-    }
-
-    fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Estado>()
-    }
-
-    fn state(&self) -> tree::State {
-        tree::State::new(Estado::default())
-    }
-
-    fn children(&self) -> Vec<Tree> {
-        vec![Tree::new(&self.conteudo)]
-    }
-
-    fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(std::slice::from_ref(&self.conteudo));
-    }
-
-    fn operate(&self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
-        self.conteudo.as_widget().operate(&mut tree.children[0], layout, renderer, operation);
-    }
-
-    fn on_event(
-        &mut self,
-        tree: &mut Tree,
-        evento: Event,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        renderer: &Renderer,
-        clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
-        viewport: &Rectangle,
-    ) -> event::Status {
-        let Tree { state, children, .. } = tree;
-        let estado = state.downcast_mut::<Estado>();
-        let filho = &mut children[0];
-        let mut status = event::Status::Ignored;
-        if let Some(fonte) = &self.fonte {
-            // Sem overlay aberto, o lote do ciclo ainda não saiu da fonte.
-            if estado.lote.is_empty() {
-                estado.recolher(fonte, |p| Some(mouse::Cursor::Available(p)));
-            }
-            for (sintetico, cursor_sintetico) in std::mem::take(&mut estado.lote) {
-                let Some(c) = cursor_sintetico else { continue };
-                status = status.merge(self.conteudo.as_widget_mut().on_event(
-                    filho, Event::Mouse(sintetico), layout, c, renderer, clipboard, shell, viewport,
-                ));
-            }
-            if !estado.real_passa(&evento) {
-                return event::Status::Captured;
-            }
-            estado.anotar_real(&evento, Instant::now());
-        }
-        status.merge(self.conteudo.as_widget_mut().on_event(
-            filho, evento, layout, cursor, renderer, clipboard, shell, viewport,
-        ))
-    }
-
-    fn mouse_interaction(
-        &self,
-        tree: &Tree,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        viewport: &Rectangle,
-        renderer: &Renderer,
-    ) -> mouse::Interaction {
-        self.conteudo.as_widget().mouse_interaction(&tree.children[0], layout, cursor, viewport, renderer)
-    }
-
-    fn overlay<'b>(
-        &'b mut self,
-        tree: &'b mut Tree,
-        layout: Layout<'_>,
-        renderer: &Renderer,
-        translation: Vector,
-    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
-        let Tree { state, children, .. } = tree;
-        let interno = self.conteudo.as_widget_mut().overlay(&mut children[0], layout, renderer, translation)?;
-        match &self.fonte {
-            Some(fonte) => Some(overlay::Element::new(Box::new(Sobreposicao {
-                interno,
-                estado: state.downcast_mut::<Estado>(),
-                fonte: fonte.clone(),
-            }))),
-            None => Some(interno),
-        }
+/// Faz os toques do `lote` (o da [`crate::caneta::assinatura_toques`]) chegarem
+/// aos widgets já: sem ela, o clique da caneta espera o próximo evento da janela.
+/// Passa à janela um `CursorMoved` onde a ponta está (lá o ponteiro também está).
+pub fn entregar_cliques<M: Send + 'static>(janela: WindowId, lote: &[ToqueCaneta]) -> Task<M> {
+    match lote.iter().rev().find(|t| !t.na_tinta) {
+        Some(t) => Task::window_event(janela, Event::CursorMoved(t.posicao)),
+        None => Task::none(),
     }
 }
 
-/// O overlay aberto (lista de um `pick_list`, por exemplo) recebe os
-/// eventos antes da base: o lote do ciclo sai da fonte aqui e o que ele
-/// captura não desce. shortcut: só o overlay de primeiro nível recebe o
-/// toque (um overlay aninhado nele, não); trocar se algum app abrir
-/// submenu como overlay do Iced.
-struct Sobreposicao<'a, 'b, Message, Theme, Renderer> {
-    interno: overlay::Element<'a, Message, Theme, Renderer>,
-    estado: &'b mut Estado,
-    fonte: FontePressao,
-}
-
-impl<Message, Theme, Renderer> overlay::Overlay<Message, Theme, Renderer> for Sobreposicao<'_, '_, Message, Theme, Renderer>
-where
-    Renderer: renderer::Renderer,
-{
-    fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
-        self.interno.layout(renderer, bounds)
+impl<M> Widget<M> for CliqueCaneta<'_, M> {
+    fn size(&self) -> (Length, Length) {
+        self.conteudo.widget().size()
     }
-
-    fn draw(&self, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor) {
-        self.interno.draw(renderer, theme, style, layout, cursor);
+    fn layout(&self, cx: &mut LayoutCx, l: Limits) -> Node {
+        let n = cx.child(0, &self.conteudo, l);
+        Node { rect: n.rect, key: cx.key(), children: vec![n], ..Default::default() }
     }
-
-    fn operate(&mut self, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
-        self.interno.operate(layout, renderer, operation);
+    fn draw(&self, n: &Node, cx: &mut DrawCx) {
+        self.conteudo.widget().draw(&n.children[0], cx);
     }
-
-    fn on_event(
-        &mut self,
-        evento: Event,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        renderer: &Renderer,
-        clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
-    ) -> event::Status {
-        let mut status = event::Status::Ignored;
-        if self.estado.lote.is_empty() {
-            self.estado.recolher(&self.fonte, |p| Some(mouse::Cursor::Available(p)));
-            for (sintetico, c) in &mut self.estado.lote {
-                let Some(mouse::Cursor::Available(p)) = *c else { continue };
-                let s = self.interno.on_event(Event::Mouse(*sintetico), layout, mouse::Cursor::Available(p), renderer, clipboard, shell);
-                status = status.merge(s);
-                // Capturado não desce; sobre o overlay, a base não vê o cursor.
-                *c = match s {
-                    event::Status::Captured => None,
-                    _ if self.interno.is_over(layout, renderer, p) => Some(mouse::Cursor::Unavailable),
-                    _ => Some(mouse::Cursor::Available(p)),
-                };
+    fn opaque_at(&self, n: &Node, p: Point) -> bool {
+        self.conteudo.widget().opaque_at(&n.children[0], p)
+    }
+    fn event(&self, n: &Node, ev: &Event, cx: &mut EventCx<M>) -> Captured {
+        let filho = &n.children[0];
+        let Some(fonte) = &self.fonte else { return self.conteudo.widget().event(filho, ev, cx) };
+        let mut estado = std::mem::take(cx.states.get_mut::<Estado>(n.key));
+        let agora = Instant::now();
+        // O real antes dos toques: um aperto da janela que chega junto do encostar vence.
+        let mut pegou = if estado.real_passa(ev) {
+            estado.anotar_real(ev, agora);
+            self.conteudo.widget().event(filho, ev, cx)
+        } else {
+            Captured::Yes
+        };
+        let real = cx.cursor;
+        for toque in fonte.recolher_cliques() {
+            for sintetico in estado.traduzir(&toque, agora) {
+                // `dispatch` também decide menu aberto por cima e tira o foco no aperto.
+                cx.cursor = Some(toque.posicao);
+                cx.redraw = true;
+                if dispatch(&self.conteudo, filho, &sintetico, cx) == Captured::Yes {
+                    pegou = Captured::Yes;
+                }
             }
         }
-        if !self.estado.real_passa(&evento) {
-            return event::Status::Captured;
-        }
-        status.merge(self.interno.on_event(evento, layout, cursor, renderer, clipboard, shell))
-    }
-
-    fn mouse_interaction(&self, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
-        self.interno.mouse_interaction(layout, cursor, viewport, renderer)
-    }
-
-    fn is_over(&self, layout: Layout<'_>, renderer: &Renderer, cursor_position: Point) -> bool {
-        self.interno.is_over(layout, renderer, cursor_position)
-    }
-
-    fn overlay<'c>(&'c mut self, layout: Layout<'_>, renderer: &Renderer) -> Option<overlay::Element<'c, Message, Theme, Renderer>> {
-        self.interno.overlay(layout, renderer)
+        cx.cursor = real;
+        *cx.states.get_mut::<Estado>(n.key) = estado;
+        pegou
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<CliqueCaneta<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
-where
-    Message: 'a,
-    Theme: 'a,
-    Renderer: renderer::Renderer + 'a,
-{
-    fn from(c: CliqueCaneta<'a, Message, Theme, Renderer>) -> Self {
+impl<'a, M: 'a> From<CliqueCaneta<'a, M>> for Element<'a, M> {
+    fn from(c: CliqueCaneta<'a, M>) -> Self {
         Element::new(c)
     }
 }
@@ -327,36 +168,38 @@ where
 #[cfg(test)]
 mod testes {
     use super::*;
+    use pelicano::widget::{layout, MemoryClipboard};
+    use pelicano::{button, Color, Renderer, Size, States, Theme};
 
     fn toque(fase: FaseToque, x: f32) -> ToqueCaneta {
         ToqueCaneta { fase, posicao: Point::new(x, 10.0), pressao: Some(0.5), instante: Instant::now(), na_tinta: false, borracha: false }
     }
 
-    fn apertos(eventos: &[mouse::Event]) -> Vec<&mouse::Event> {
-        eventos.iter().filter(|e| !matches!(e, mouse::Event::CursorMoved { .. })).collect()
+    fn apertos(eventos: &[Event]) -> Vec<&Event> {
+        eventos.iter().filter(|e| !matches!(e, Event::CursorMoved(_))).collect()
     }
 
     #[test]
-    fn toque_sem_clique_do_iced_vira_aperto_arrasto_e_soltura() {
+    fn toque_sem_clique_da_janela_vira_aperto_arrasto_e_soltura() {
         let mut e = Estado::default();
         let t0 = Instant::now();
         let a = e.traduzir(&toque(FaseToque::Encostou, 5.0), t0);
-        assert_eq!(apertos(&a), [&mouse::Event::ButtonPressed(mouse::Button::Left)]);
-        assert_eq!(e.traduzir(&toque(FaseToque::Moveu, 9.0), t0), [mouse::Event::CursorMoved { position: Point::new(9.0, 10.0) }]);
-        // Enquanto o invólucro aperta, o esquerdo do Iced não passa (não duplica).
-        assert!(!e.real_passa(&Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))));
-        assert!(e.real_passa(&Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))));
+        assert_eq!(apertos(&a), [&Event::MousePressed(MouseButton::Left)]);
+        assert_eq!(e.traduzir(&toque(FaseToque::Moveu, 9.0), t0), [Event::CursorMoved(Point::new(9.0, 10.0))]);
+        // Enquanto o invólucro aperta, o esquerdo da janela não passa (não duplica).
+        assert!(!e.real_passa(&Event::MousePressed(MouseButton::Left)));
+        assert!(e.real_passa(&Event::MousePressed(MouseButton::Right)));
         let s = e.traduzir(&toque(FaseToque::Levantou, 9.0), t0);
-        assert_eq!(apertos(&s), [&mouse::Event::ButtonReleased(mouse::Button::Left)]);
-        assert!(e.real_passa(&Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))), "mouse volta a passar");
+        assert_eq!(apertos(&s), [&Event::MouseReleased(MouseButton::Left)]);
+        assert!(e.real_passa(&Event::MousePressed(MouseButton::Left)), "mouse volta a passar");
     }
 
     #[test]
-    fn clique_do_iced_que_veio_antes_vence_e_soltura_que_faltou_e_completada() {
-        let pressionar = Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
-        let soltar = Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+    fn clique_da_janela_que_veio_antes_vence_e_soltura_que_faltou_e_completada() {
+        let pressionar = Event::MousePressed(MouseButton::Left);
+        let soltar = Event::MouseReleased(MouseButton::Left);
         let t0 = Instant::now();
-        // Aperto e soltura do Iced chegaram: o toque não repete nada.
+        // Aperto e soltura da janela chegaram: o toque não repete nada.
         let mut e = Estado::default();
         e.anotar_real(&pressionar, t0);
         e.anotar_real(&soltar, t0);
@@ -366,11 +209,40 @@ mod testes {
         let mut e = Estado::default();
         e.anotar_real(&pressionar, t0);
         assert!(e.traduzir(&toque(FaseToque::Encostou, 5.0), t0).is_empty());
-        assert_eq!(e.traduzir(&toque(FaseToque::Levantou, 5.0), t0), [mouse::Event::ButtonReleased(mouse::Button::Left)]);
+        assert_eq!(e.traduzir(&toque(FaseToque::Levantou, 5.0), t0), [Event::MouseReleased(MouseButton::Left)]);
         // Clique do mouse antigo não conta como o da caneta.
         let mut e = Estado::default();
         e.anotar_real(&pressionar, t0);
         let depois = t0 + JANELA_REAL + Duration::from_millis(1);
         assert_eq!(apertos(&e.traduzir(&toque(FaseToque::Encostou, 5.0), depois)).len(), 1);
+    }
+
+    #[test]
+    fn toque_da_caneta_aperta_o_botao_pelo_involucro() {
+        let fonte = FontePressao::nova();
+        let raiz: Element<'_, u8> = clique_caneta(button("ok").on_press(7u8), Some(&fonte)).into();
+        let (mut r, mut st, mut area) = (Renderer::new(), States::default(), MemoryClipboard::default());
+        let tela = Size::new(200.0, 100.0);
+        r.begin(tela, 1.0, Color::TRANSPARENT);
+        let n = layout(&raiz, tela, &mut r, &st, &Theme::dark());
+        let mut evento = |st: &mut States, r: &mut Renderer, ev: Event, cursor: Option<Point>| {
+            let mut msgs = Vec::new();
+            let mut cx = EventCx { renderer: r, states: st, cursor, messages: &mut msgs, window: &mut Vec::new(), redraw: false, clipboard: &mut area };
+            let c = dispatch(&raiz, &n, &ev, &mut cx);
+            (msgs, c)
+        };
+        fonte.enviar_toque(toque(FaseToque::Encostou, 10.0));
+        fonte.enviar_toque(toque(FaseToque::Levantou, 10.0));
+        let lote = fonte.recolher_toques();
+        assert_eq!(lote.len(), 2);
+        let _: Task<u8> = entregar_cliques(WindowId::MAIN, &lote);
+        // O cursor real está longe: o clique é o do toque, em (10, 10).
+        let (msgs, c) = evento(&mut st, &mut r, Event::CursorMoved(Point::new(150.0, 90.0)), Some(Point::new(150.0, 90.0)));
+        assert_eq!((msgs, c), (vec![7], Captured::Yes));
+        // Sem toque pendente, o mouse segue normal.
+        let (msgs, _) = evento(&mut st, &mut r, Event::MousePressed(MouseButton::Left), Some(Point::new(10.0, 10.0)));
+        assert!(msgs.is_empty());
+        let (msgs, _) = evento(&mut st, &mut r, Event::MouseReleased(MouseButton::Left), Some(Point::new(10.0, 10.0)));
+        assert_eq!(msgs, vec![7]);
     }
 }

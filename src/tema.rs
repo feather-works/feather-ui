@@ -1,10 +1,7 @@
 //! Estilos visuais e cores que reproduzem exatamente o design da suíte FeatherWorks.
 
-use iced::border::Radius;
-use iced::widget::{button, container};
+use pelicano::{Border, Color, Point, Shadow, Status, Style, Theme};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
-use iced::{Background, Border, Color, Shadow};
 
 // Paleta da suíte, clara ou escura, com a cor de destaque escolhida nas Configurações.
 // Cada cor é uma função (nome em maiúsculas, para manter o jeito de usar de antes) porque
@@ -23,11 +20,10 @@ pub const ACENTOS: [(&str, &str, &str); 6] = [
     ("Roxo", "#8e24aa", "#d7aefb"),
 ];
 
-/// Resolve a preferência automática usando o tema nativo detectado pelo Iced.
-/// Na versão 0.13, a detecção é feita ao iniciar o processo.
+/// Resolve a preferência automática pelo tema do sistema (`pelicano::system_dark`).
 pub fn escuro_resolvido(automatico: bool, escuro_preferido: bool) -> bool {
     if automatico {
-        matches!(iced::Theme::default(), iced::Theme::Dark)
+        pelicano::system_dark()
     } else {
         escuro_preferido
     }
@@ -42,13 +38,24 @@ pub fn escuro() -> bool {
     ESCURO.load(Ordering::Relaxed)
 }
 
-pub fn tema_iced() -> iced::Theme {
-    if escuro() { iced::Theme::Dark } else { iced::Theme::Light }
+/// O tema do pelicano com as cores da suíte: devolva no `App::theme`. Os controles que não
+/// recebem estilo (caixas, chaves, menus, abas) pegam o acento e as superfícies daqui.
+pub fn tema() -> Theme {
+    Theme {
+        background: COR_FUNDO_JANELA(),
+        surface: COR_PAINEL(),
+        text: COR_TEXTO(),
+        muted: COR_TEXTO_MUTED(),
+        primary: COR_AZUL_ACENTO(),
+        on_primary: crate::acessibilidade::texto_sobre(COR_AZUL_ACENTO()),
+        border: COR_BORDA(),
+        danger: COR_ERRO(),
+    }
 }
 
 fn hex(s: &str) -> Color {
     let v = u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0);
-    Color::from_rgb8((v >> 16) as u8, (v >> 8) as u8, v as u8)
+    Color::rgb8((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
 fn par(claro: &str, escuro_: &str) -> Color {
@@ -87,6 +94,12 @@ pub fn COR_PAINEL_FAIXA() -> Color { par("#f8f9fa", "#2d3035") }
 pub fn COR_BORDA() -> Color { par("#dadce0", "#3d4147") }
 #[allow(non_snake_case)]
 pub fn COR_BORDA_SUAVE() -> Color { par("#e8eaed", "#33363b") }
+/// Trilho e polegar da barra de rolagem padrão do Iced (`background.weak`/`.strong` dos
+/// temas Light/Dark dele), para ficar igual à versão Iced.
+#[allow(non_snake_case)]
+pub fn COR_TRILHO_ROLAGEM() -> Color { par("#ededed", "#656666") }
+#[allow(non_snake_case)]
+pub fn COR_POLEGAR_ROLAGEM() -> Color { par("#cbcbcb", "#9a9a9b") }
 #[allow(non_snake_case)]
 pub fn COR_TEXTO() -> Color { par("#202124", "#e8eaed") }
 #[allow(non_snake_case)]
@@ -101,7 +114,7 @@ pub fn COR_ACENTO_TEXTO(fundo: Color) -> Color {
     crate::acessibilidade::texto_acento(COR_AZUL_ACENTO(), fundo)
 }
 
-/// Borda de foco em controles Iced, >= 3:1 sobre a superfície indicada.
+/// Borda de foco nos controles, >= 3:1 sobre a superfície indicada.
 #[allow(non_snake_case)]
 pub fn COR_FOCO(fundo: Color) -> Color {
     crate::acessibilidade::borda_foco(COR_AZUL_ACENTO(), fundo)
@@ -131,106 +144,56 @@ pub fn COR_HOVER_AZUL() -> Color { mistura(COR_PAINEL(), COR_AZUL_ACENTO(), if e
 pub fn COR_MESA() -> Color { par("#e8eaed", "#2b2e33") }
 
 /// Botão Pílula "Página inicial" no topo (arredondado com borda fina)
-pub fn estilo_pilha_inicio(_theme: &iced::Theme, status: button::Status) -> button::Style {
+pub fn estilo_pilha_inicio(_: &Theme, status: Status) -> Style {
     let bg = match status {
-        button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-        button::Status::Pressed => Some(Background::Color(COR_AZUL_FUNDO())),
-        _ => Some(Background::Color(COR_PAINEL())),
+        Status::Hovered => COR_HOVER(),
+        Status::Pressed => COR_AZUL_FUNDO(),
+        _ => COR_PAINEL(),
     };
-    button::Style {
-        background: bg,
-        text_color: COR_TEXTO(),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            radius: Radius::from(16.0),
-        },
-        shadow: Shadow::default(),
-    }
+    Style::default().background(bg).text_color(COR_TEXTO()).border(Border::rounded(16.0).color(COR_BORDA(), 1.0))
 }
 
 /// Botão Primário Azul ("Nova apresentação")
-pub fn estilo_botao_primario(_theme: &iced::Theme, status: button::Status) -> button::Style {
+pub fn estilo_botao_primario(_: &Theme, status: Status) -> Style {
     let bg = match status {
-        button::Status::Hovered => Color { r: 0.090, g: 0.396, b: 0.800, a: 1.0 },
-        button::Status::Pressed => Color { r: 0.082, g: 0.345, b: 0.690, a: 1.0 },
-        button::Status::Disabled => Color { r: 0.741, g: 0.757, b: 0.776, a: 1.0 },
+        Status::Hovered => Color { r: 0.090, g: 0.396, b: 0.800, a: 1.0 },
+        Status::Pressed => Color { r: 0.082, g: 0.345, b: 0.690, a: 1.0 },
+        Status::Disabled => Color { r: 0.741, g: 0.757, b: 0.776, a: 1.0 },
         _ => COR_AZUL_ACENTO(),
     };
-    button::Style {
-        background: Some(Background::Color(bg)),
-        text_color: crate::acessibilidade::texto_sobre(bg),
-        border: Border {
-            radius: Radius::from(6.0),
-            ..Border::default()
-        },
-        shadow: Shadow::default(),
-    }
+    Style::default().background(bg).text_color(crate::acessibilidade::texto_sobre(bg)).border(Border::rounded(6.0))
 }
 
 /// Botão Secundário Branco com Borda ("Abrir…")
-pub fn estilo_botao_secundario(_theme: &iced::Theme, status: button::Status) -> button::Style {
+pub fn estilo_botao_secundario(_: &Theme, status: Status) -> Style {
     let bg = match status {
-        button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-        button::Status::Pressed => Some(Background::Color(COR_AZUL_FUNDO())),
-        _ => Some(Background::Color(COR_PAINEL())),
+        Status::Hovered => COR_HOVER(),
+        Status::Pressed => COR_AZUL_FUNDO(),
+        _ => COR_PAINEL(),
     };
-    button::Style {
-        background: bg,
-        text_color: COR_TEXTO(),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            radius: Radius::from(6.0),
-        },
-        shadow: Shadow::default(),
-    }
+    Style::default().background(bg).text_color(COR_TEXTO()).border(Border::rounded(6.0).color(COR_BORDA(), 1.0))
 }
 
 /// Botão Redondo para ações no topo (Configurações, Ajuda)
-pub fn estilo_botao_circular(_theme: &iced::Theme, status: button::Status) -> button::Style {
-    let bg = match status {
-        button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-        button::Status::Pressed => Some(Background::Color(COR_AZUL_FUNDO())),
-        _ => None,
-    };
-    button::Style {
-        background: bg,
-        text_color: COR_TEXTO_MUTED(),
-        border: Border {
-            radius: Radius::from(17.0),
-            ..Border::default()
-        },
-        shadow: Shadow::default(),
+pub fn estilo_botao_circular(_: &Theme, status: Status) -> Style {
+    let s = Style::default().text_color(COR_TEXTO_MUTED()).border(Border::rounded(17.0));
+    match status {
+        Status::Hovered => s.background(COR_HOVER()),
+        Status::Pressed => s.background(COR_AZUL_FUNDO()),
+        _ => s,
     }
 }
 
 /// Aba da Faixa de Opções (Ribbon Tab)
-pub fn estilo_aba_faixa(ativa: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    move |_theme, status| {
-        let (cor_texto, cor_borda, bg) = if ativa {
-            (COR_ACENTO_TEXTO(COR_CROMO()), COR_AZUL_ACENTO(), None)
-        } else {
-            let cor = match status {
-                button::Status::Hovered => COR_TEXTO(),
-                _ => COR_TEXTO_MUTED(),
-            };
-            let bg = match status {
-                button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-                _ => None,
-            };
-            (cor, Color::TRANSPARENT, bg)
-        };
-
-        button::Style {
-            background: bg,
-            text_color: cor_texto,
-            border: Border {
-                color: cor_borda,
-                width: if ativa { 2.0 } else { 0.0 },
-                radius: Radius::from(3.0),
-            },
-            shadow: Shadow::default(),
+pub fn estilo_aba_faixa(ativa: bool) -> impl Fn(&Theme, Status) -> Style {
+    move |_, status| {
+        if ativa {
+            return Style::default().text_color(COR_ACENTO_TEXTO(COR_CROMO())).border(Border::rounded(3.0).color(COR_AZUL_ACENTO(), 2.0));
+        }
+        let s = Style::default().border(Border::rounded(3.0));
+        match status {
+            Status::Hovered => s.background(COR_HOVER()).text_color(COR_TEXTO()),
+            _ => s.text_color(COR_TEXTO_MUTED()),
         }
     }
 }
@@ -240,362 +203,155 @@ pub const LARGURA_MENU: f32 = 272.0;
 pub const LARGURA_SUBMENU: f32 = 236.0;
 
 /// Painel suspenso nativo equivalente a .menu-panel/.menu-sub do TypeScript.
-pub fn estilo_popup_menu(_: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        border: Border { color: COR_BORDA_SUAVE(), width: 1.0, radius: Radius::from(8.0) },
-        shadow: Shadow {
-            color: Color::from_rgba(0.0, 0.0, 0.0, if escuro() { 0.35 } else { 0.18 }),
-            offset: iced::Vector::new(0.0, 6.0),
-            blur_radius: 18.0,
-        },
-        ..Default::default()
-    }
+pub fn estilo_popup_menu(_: &Theme) -> Style {
+    Style::default()
+        .background(COR_PAINEL())
+        .border(Border::rounded(8.0).color(COR_BORDA_SUAVE(), 1.0))
+        .shadow(Shadow { color: Color { a: if escuro() { 0.35 } else { 0.18 }, ..Color::BLACK }, offset: Point::new(0.0, 6.0), blur: 18.0 })
 }
 
 /// Título da barra de menus: altura 22px, radius 4px, destaque discreto.
-pub fn estilo_titulo_menu(ativo: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    move |_, estado| button::Style {
-        background: if ativo || matches!(estado, button::Status::Hovered | button::Status::Pressed) {
-            Some(Background::Color(if ativo { COR_AZUL_FUNDO() } else { COR_HOVER() }))
-        } else { None },
-        text_color: if ativo { COR_TEXTO() } else { COR_TEXTO_MUTED() },
-        border: Border { radius: Radius::from(4.0), ..Default::default() },
-        ..Default::default()
+pub fn estilo_titulo_menu(ativo: bool) -> impl Fn(&Theme, Status) -> Style {
+    move |_, estado| {
+        let s = Style::default().text_color(if ativo { COR_TEXTO() } else { COR_TEXTO_MUTED() }).border(Border::rounded(4.0));
+        if ativo || matches!(estado, Status::Hovered | Status::Pressed) {
+            s.background(if ativo { COR_AZUL_FUNDO() } else { COR_HOVER() })
+        } else {
+            s
+        }
     }
 }
 
 /// Item de menu: radius 5px e realce apenas em hover/seleção.
-pub fn estilo_item_menu(
-    selecionado: bool,
-    disponivel: bool,
-) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    move |_, estado| button::Style {
-        background: if disponivel && (selecionado
-            || matches!(estado, button::Status::Hovered | button::Status::Pressed)) {
-            Some(Background::Color(COR_HOVER()))
-        } else { None },
-        text_color: if disponivel { COR_TEXTO() } else { COR_TEXTO_MUTED() },
-        border: Border { radius: Radius::from(5.0), ..Default::default() },
-        ..Default::default()
+pub fn estilo_item_menu(selecionado: bool, disponivel: bool) -> impl Fn(&Theme, Status) -> Style {
+    move |_, estado| {
+        let s = Style::default().text_color(if disponivel { COR_TEXTO() } else { COR_TEXTO_MUTED() }).border(Border::rounded(5.0));
+        if disponivel && (selecionado || matches!(estado, Status::Hovered | Status::Pressed)) {
+            s.background(COR_HOVER())
+        } else {
+            s
+        }
     }
+}
+
+/// Fundo e cor do texto de um botão da faixa (grande ou pequeno).
+fn botao_faixa(ativo: bool, status: Status, raio: f32, apertado: Color) -> Style {
+    let mut s = Style::default().border(Border::rounded(raio));
+    if ativo {
+        s = s.background(COR_AZUL_FUNDO());
+    } else if status == Status::Hovered {
+        s = s.background(COR_HOVER());
+    } else if status == Status::Pressed {
+        s = s.background(apertado);
+    }
+    s.text_color(if status == Status::Disabled {
+        Color { a: 0.4, ..COR_TEXTO() }
+    } else if ativo {
+        COR_ACENTO_TEXTO(COR_AZUL_FUNDO())
+    } else {
+        COR_TEXTO()
+    })
 }
 
 /// Botão Grande na Faixa de Opções (com ícone em cima e rótulo embaixo)
-pub fn estilo_botao_grande(ativo: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    move |_theme, status| {
-        let bg = if ativo {
-            Some(Background::Color(COR_AZUL_FUNDO()))
-        } else {
-            match status {
-                button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-                button::Status::Pressed => Some(Background::Color(COR_AZUL_FUNDO())),
-                _ => None,
-            }
-        };
-
-        button::Style {
-            background: bg,
-            text_color: if status == button::Status::Disabled {
-                Color { a: 0.4, ..COR_TEXTO() }
-            } else if ativo {
-                COR_ACENTO_TEXTO(COR_AZUL_FUNDO())
-            } else {
-                COR_TEXTO()
-            },
-            border: Border {
-                radius: Radius::from(6.0),
-                ..Border::default()
-            },
-            shadow: Shadow::default(),
-        }
-    }
+pub fn estilo_botao_grande(ativo: bool) -> impl Fn(&Theme, Status) -> Style {
+    move |_, status| botao_faixa(ativo, status, 6.0, COR_AZUL_FUNDO())
 }
 
 /// Botão Pequeno Compacto na Faixa (formatação de texto, alinhamento, etc.)
-pub fn estilo_botao_pequeno(ativo: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    move |_theme, status| {
-        let bg = if ativo {
-            Some(Background::Color(COR_AZUL_FUNDO()))
-        } else {
-            match status {
-                button::Status::Hovered => Some(Background::Color(COR_HOVER())),
-                button::Status::Pressed => Some(Background::Color(COR_HOVER_AZUL())),
-                _ => None,
-            }
-        };
-
-        button::Style {
-            background: bg,
-            text_color: if status == button::Status::Disabled {
-                Color { a: 0.4, ..COR_TEXTO() }
-            } else if ativo {
-                COR_ACENTO_TEXTO(COR_AZUL_FUNDO())
-            } else {
-                COR_TEXTO()
-            },
-            border: Border {
-                radius: Radius::from(4.0),
-                ..Border::default()
-            },
-            shadow: Shadow::default(),
-        }
-    }
+pub fn estilo_botao_pequeno(ativo: bool) -> impl Fn(&Theme, Status) -> Style {
+    move |_, status| botao_faixa(ativo, status, 4.0, COR_HOVER_AZUL())
 }
 
 /// Barra Superior (Topo)
-pub fn estilo_container_topo(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        ..container::Style::default()
-    }
+pub fn estilo_container_topo(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL())
 }
 
 /// Painel (cartões e blocos claros, com borda fina)
-pub fn estilo_painel_faixa(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL_FAIXA())),
-        border: Border { color: COR_BORDA(), width: 1.0, ..Border::default() },
-        ..container::Style::default()
-    }
+pub fn estilo_painel_faixa(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL_FAIXA()).border(Border::default().color(COR_BORDA(), 1.0))
 }
 
 /// O corpo da faixa: fundo cinza-azulado, sem borda (a linha vem de `linha_vertical`/`linha_horizontal`).
-pub fn estilo_corpo_faixa(_theme: &iced::Theme) -> container::Style {
-    container::Style { background: Some(Background::Color(COR_CROMO_2())), ..container::Style::default() }
+pub fn estilo_corpo_faixa(_: &Theme) -> Style {
+    Style::default().background(COR_CROMO_2())
 }
 
 /// A barra de abas da faixa.
-pub fn estilo_barra_abas(_theme: &iced::Theme) -> container::Style {
-    container::Style { background: Some(Background::Color(COR_CROMO())), ..container::Style::default() }
+pub fn estilo_barra_abas(_: &Theme) -> Style {
+    Style::default().background(COR_CROMO())
 }
 
 /// Uma linha fina (divisória) na cor da borda; o tamanho vem de quem a usa.
-pub fn estilo_linha(_theme: &iced::Theme) -> container::Style {
-    container::Style { background: Some(Background::Color(COR_BORDA())), ..container::Style::default() }
+pub fn estilo_linha(_: &Theme) -> Style {
+    Style::default().background(COR_BORDA())
 }
 
 /// O sublinhado da aba ativa.
-pub fn estilo_sublinhado_aba(ativa: bool) -> impl Fn(&iced::Theme) -> container::Style {
-    move |_| container::Style {
-        background: Some(Background::Color(if ativa { COR_AZUL_ACENTO() } else { Color::TRANSPARENT })),
-        ..container::Style::default()
-    }
+pub fn estilo_sublinhado_aba(ativa: bool) -> impl Fn(&Theme) -> Style {
+    move |_| Style::default().background(if ativa { COR_AZUL_ACENTO() } else { Color::TRANSPARENT })
 }
 
 /// Barra Lateral de Miniaturas dos Slides
-pub fn estilo_painel_miniaturas(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_FUNDO_JANELA())),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            ..Border::default()
-        },
-        ..container::Style::default()
-    }
+pub fn estilo_painel_miniaturas(_: &Theme) -> Style {
+    Style::default().background(COR_FUNDO_JANELA()).border(Border::default().color(COR_BORDA(), 1.0))
 }
 
 /// Painel de Anotações do Apresentador
-pub fn estilo_painel_notas(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            ..Border::default()
-        },
-        ..container::Style::default()
-    }
+pub fn estilo_painel_notas(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL()).border(Border::default().color(COR_BORDA(), 1.0))
 }
 
 /// Barra de Status no Rodapé
-pub fn estilo_rodape(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            ..Border::default()
-        },
-        ..container::Style::default()
-    }
+pub fn estilo_rodape(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL()).border(Border::default().color(COR_BORDA(), 1.0))
 }
 
-/// Switch compartilhado: segue o acento configurado (e não o azul padrão
-/// de iced::Theme), inclusive após troca de tema sem reiniciar a janela.
-pub fn estilo_toggle(
-    tema: &iced::Theme,
-    status: iced::widget::toggler::Status,
-) -> iced::widget::toggler::Style {
-    use iced::widget::toggler::Status;
-    let (ligado, sobre, habilitado) = match status {
-        Status::Active { is_toggled } => (is_toggled, false, true),
-        Status::Hovered { is_toggled } => (is_toggled, true, true),
-        Status::Disabled => (false, false, false),
-    };
-    // Iced 0.13: background/foreground são Color (não Background).
-    // Mantém a geometria do controle nativo e substitui apenas a paleta.
-    let mut estilo = iced::widget::toggler::default(tema, status);
-    let acento = COR_AZUL_ACENTO();
-    let trilho = if ligado {
-        acento
-    } else if sobre {
-        COR_HOVER()
-    } else {
-        COR_CROMO_2()
-    };
-    estilo.background = Color {
-        a: if habilitado { 1.0 } else { 0.45 },
-        ..trilho
-    };
-    estilo.foreground = Color {
-        a: if habilitado { 1.0 } else { 0.5 },
-        ..if ligado {
-            crate::acessibilidade::texto_sobre(acento)
-        } else {
-            COR_TEXTO_MUTED()
-        }
-    };
-    estilo.background_border_width = if ligado { 0.0 } else { 1.0 };
-    estilo.background_border_color = if ligado { acento } else { COR_BORDA() };
-    estilo.foreground_border_width = 0.0;
-    estilo.foreground_border_color = Color::TRANSPARENT;
-    estilo
-}
-
-/// Dropdowns compartilhados usam um campo legível e realce de foco,
-/// inclusive em telas escuras. Popups usam a mesma paleta da suíte.
-pub fn estilo_menu_da_faixa(_theme: &iced::Theme, status: iced::widget::pick_list::Status) -> iced::widget::pick_list::Style {
-    use iced::widget::pick_list::Status;
-    let sobre = matches!(status, Status::Hovered | Status::Opened);
-    iced::widget::pick_list::Style {
-        text_color: COR_TEXTO(),
-        placeholder_color: COR_TEXTO_MUTED(),
-        handle_color: COR_AZUL_ACENTO(),
-        background: Background::Color(if sobre { COR_AZUL_FUNDO() } else { COR_PAINEL() }),
-        border: Border {
-            color: if sobre { COR_FOCO(COR_AZUL_FUNDO()) } else { COR_BORDA() },
-            width: 1.0,
-            radius: Radius::from(5.0),
-        },
-    }
-}
-
-/// Paleta e bordas do painel de opções, usada por todos os pick_list e
-/// combo_box. O destaque continua visível no tema claro e no escuro.
-pub fn estilo_menu_popup(_theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
-    iced::widget::overlay::menu::Style {
-        background: Background::Color(COR_PAINEL()),
-        border: Border {
-            color: COR_BORDA(),
-            width: 1.0,
-            radius: Radius::from(6.0),
-        },
-        text_color: COR_TEXTO(),
-        selected_text_color: COR_TEXTO(),
-        selected_background: Background::Color(COR_AZUL_FUNDO()),
-    }
-}
-
-/// Entrada de texto do dropdown pesquisável (Iced ComboBox).
-pub fn estilo_entrada_suspensa(
-    _theme: &iced::Theme,
-    status: iced::widget::text_input::Status,
-) -> iced::widget::text_input::Style {
-    use iced::widget::text_input::Status;
-    let focado = matches!(status, Status::Focused { .. });
-    let sobre = focado || matches!(status, Status::Hovered);
-    iced::widget::text_input::Style {
-        background: Background::Color(if sobre { COR_AZUL_FUNDO() } else { COR_PAINEL() }),
-        border: Border {
-            color: if focado { COR_FOCO(COR_AZUL_FUNDO()) } else { COR_BORDA() },
-            width: if focado { 1.5 } else { 1.0 },
-            radius: Radius::from(5.0),
-        },
-        placeholder: COR_TEXTO_MUTED(),
-        value: COR_TEXTO(),
-        selection: COR_HOVER_AZUL(),
-        icon: COR_TEXTO_MUTED(),
-    }
+/// Campo de texto (e a busca dos menus pesquisáveis): realce de foco legível nos dois temas.
+pub fn estilo_entrada_suspensa(_: &Theme, status: Status) -> Style {
+    let focado = status == Status::Focused;
+    let sobre = focado || status == Status::Hovered;
+    Style::default()
+        .background(if sobre { COR_AZUL_FUNDO() } else { COR_PAINEL() })
+        .text_color(COR_TEXTO())
+        .border(Border::rounded(5.0).color(if focado { COR_FOCO(COR_AZUL_FUNDO()) } else { COR_BORDA() }, if focado { 1.5 } else { 1.0 }))
 }
 
 /// O balão de dica (tooltip): painel pequeno com borda fina.
-pub fn estilo_dica(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        text_color: Some(COR_TEXTO()),
-        border: Border { color: COR_BORDA(), width: 1.0, radius: Radius::from(4.0) },
-        ..container::Style::default()
-    }
+pub fn estilo_dica(_: &Theme) -> Style {
+    Style::default().background(COR_PAINEL()).text_color(COR_TEXTO()).border(Border::rounded(4.0).color(COR_BORDA(), 1.0))
 }
 
 /// Botão da barra de controles da apresentação: quase invisível até passar o mouse.
-pub fn estilo_controle_apresentacao(_theme: &iced::Theme, status: button::Status) -> button::Style {
-    let alfa = if matches!(status, button::Status::Hovered | button::Status::Pressed) { 0.55 } else { 0.0 };
-    button::Style {
-        background: Some(Background::Color(Color::from_rgba8(255, 255, 255, alfa))),
-        text_color: Color::WHITE,
-        border: Border { radius: Radius::from(14.0), ..Border::default() },
-        shadow: Shadow::default(),
-    }
+pub fn estilo_controle_apresentacao(_: &Theme, status: Status) -> Style {
+    let alfa = if matches!(status, Status::Hovered | Status::Pressed) { 0.55 } else { 0.0 };
+    Style::default().background(Color::WHITE.alpha(alfa)).text_color(Color::WHITE).border(Border::rounded(14.0))
 }
 
-/// Rolagem vertical com a barra num canal próprio ao lado do conteúdo (sem ficar por cima dele).
-///
-/// Iced 0.13 exige que o FILHO tenha altura Shrink, embora o próprio
-/// scrollable possa ocupar Fill. Alguns painéis enviam um Element dinâmico
-/// com height Fill: adaptar só o viewport não evita o panic.
-pub fn rolagem<'a, M: 'a>(conteudo: impl Into<iced::Element<'a, M>>) -> iced::widget::Scrollable<'a, M> {
-    let conteudo: iced::Element<'a, M> = conteudo.into();
-    let corpo = iced::widget::container(conteudo)
-        .width(iced::Length::Fill)
-        .height(iced::Length::Shrink);
-    iced::widget::scrollable(corpo).direction(iced::widget::scrollable::Direction::Vertical(
-        iced::widget::scrollable::Scrollbar::new().width(6).scroller_width(6).spacing(4),
-    ))
-}
-
-#[cfg(test)]
-mod testes_rolagem {
-    #[test]
-    fn aceita_elemento_fill_sem_panic_no_eixo_vertical() {
-        let conteudo = iced::widget::column![
-            iced::widget::text(crate::idioma::t("Planilhas recentes"))
-        ].height(iced::Length::Fill);
-        // Antes: rolagem(conteudo) causava panic em iced_widget::scrollable.
-        let _: iced::widget::Scrollable<'_, ()> = super::rolagem(conteudo);
-    }
-}
-
-#[cfg(test)]
-mod testes_toggle_suite {
-    use super::*;
-
-    #[test]
-    fn toggle_ativo_usa_o_acento_da_suite_e_desligado_e_neutro() {
-        use iced::widget::toggler::Status;
-        let tema = iced::Theme::Light;
-        let ligado = estilo_toggle(&tema, Status::Active { is_toggled: true });
-        let desligado = estilo_toggle(&tema, Status::Active { is_toggled: false });
-        assert_eq!(ligado.background, COR_AZUL_ACENTO());
-        assert_ne!(desligado.background, COR_AZUL_ACENTO());
-        assert_eq!(desligado.background_border_color, COR_BORDA());
-        assert_eq!(ligado.foreground, crate::acessibilidade::texto_sobre(COR_AZUL_ACENTO()));
-    }
+/// Rolagem vertical da suíte (o pelicano já deixa a barra fina ao lado do conteúdo).
+pub fn rolagem<'a, M: 'a>(conteudo: impl Into<pelicano::Element<'a, M>>) -> pelicano::Scrollable<'a, M> {
+    pelicano::scrollable(conteudo)
 }
 
 /// Botão "fechar" de diálogo: ícone `x` (15 px), estilo pequeno, dica "Fechar".
 /// Fica no canto direito do cabeçalho; `msg` é a mensagem de fechamento.
-/// Já existia o mesmo padrão embutido em `configuracoes::tela`; este é o
-/// helper avulso para os diálogos dos aplicativos.
-pub fn botao_fechar<'a, M: Clone + 'a + 'static>(msg: M) -> iced::Element<'a, M> {
-    use iced::widget::tooltip;
-    let botao = button(crate::icones::icone("x", 15.0))
-        .padding([5, 7])
-        .style(estilo_botao_pequeno(false))
-        .on_press(msg);
-    tooltip(botao, iced::widget::text(crate::idioma::t("Fechar")).size(12), tooltip::Position::Bottom)
-        .style(estilo_dica)
-        .into()
+pub fn botao_fechar<'a, M: Clone + 'a>(msg: M) -> pelicano::Element<'a, M> {
+    let botao = pelicano::button(crate::icones::icone("x", 15.0)).padding([5u16, 7]).style(estilo_botao_pequeno(false)).on_press(msg);
+    pelicano::tooltip(botao, crate::idioma::t("Fechar"), pelicano::TooltipPosition::Bottom).style(estilo_dica).into()
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn o_tema_do_pelicano_segue_o_acento_e_o_modo() {
+        definir_tema(true, 3);
+        let t = tema();
+        assert_eq!(t.primary, hex("#fcad70"));
+        assert_eq!(t.background, COR_FUNDO_JANELA());
+        definir_tema(false, 0);
+        assert_eq!(tema().primary, hex("#2b7a78"));
+    }
 }

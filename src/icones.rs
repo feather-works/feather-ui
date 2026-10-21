@@ -1,8 +1,10 @@
 //! Ícones coloridos do Ribbon e catálogo de ações Tabler 3.49.0 (MIT).
 //!
-//! UI-012: catálogo incorporado com `include_str!`; as GUIs Iced de Linux e
+//! UI-012: catálogo incorporado com `include_str!`; as GUIs de Linux e
 //! Windows usam o MESMO SVG, sem ler arquivos gráficos em tempo de execução.
-use iced::widget::svg;
+use pelicano::{svg, Svg, SvgView};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 #[path = "icones_ribbon.rs"]
 mod ribbon;
@@ -107,45 +109,40 @@ pub fn existe(nome: &str) -> bool {
             .any(|linha| linha.split('\t').next() == Some(nome))
 }
 
+/// O SVG analisado uma vez por desenho: o `view` pede os mesmos ícones a cada quadro.
+pub(crate) fn carregar(desenho: String) -> Svg {
+    static CACHE: OnceLock<Mutex<HashMap<String, Svg>>> = OnceLock::new();
+    let mut c = CACHE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(s) = c.get(&desenho) {
+        return s.clone();
+    }
+    // Um SVG do catálogo que não abre vira o quadrado vazio, sem derrubar o app.
+    let s = Svg::from_bytes(desenho.as_bytes()).or_else(|| Svg::from_bytes(br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>"#)).expect("svg vazio abre");
+    c.insert(desenho, s.clone());
+    s
+}
+
 /// Widget de ícone. O vetor é entregue em memória: sem fonte SVG, URL nem
 /// caminho de arquivo que possa faltar no pacote instalado em outro sistema.
-pub fn icone(nome: &str, tamanho: f32) -> svg::Svg<'static, iced::Theme> {
-    let colorido = svg_ribbon(nome).is_some();
-    let desenho = if let Some(desenho) = svg_ribbon(nome) {
-        resolver_cores_com_tema(
-            desenho,
-            &crate::tema::cor_do_icone("#202124"),
-            crate::tema::escuro(),
-        )
-    } else {
-        svg_embutido(nome)
+pub fn icone(nome: &str, tamanho: f32) -> SvgView {
+    let v = match svg_ribbon(nome) {
+        Some(desenho) => svg(carregar(resolver_cores_com_tema(desenho, &crate::tema::cor_do_icone("#202124"), crate::tema::escuro()))),
+        None => svg(carregar(svg_embutido(nome))).color(crate::tema::COR_TEXTO()),
     };
-    svg::Svg::new(svg::Handle::from_memory(desenho.into_bytes()))
-        .width(tamanho)
-        .height(tamanho)
-        .style(move |_, _| svg::Style {
-            color: if colorido {
-                None
-            } else {
-                Some(crate::tema::COR_TEXTO())
-            },
-        })
+    v.width(tamanho).height(tamanho)
 }
 
 /// Sempre o traço Tabler monocromático (cor do texto), mesmo quando a faixa
 /// tem um desenho colorido com esse nome: janelas de consulta (F1,
 /// Primeiros passos, Novidades) não misturam ícones coloridos e de traço.
-pub fn icone_traco(nome: &str, tamanho: f32) -> svg::Svg<'static, iced::Theme> {
-    svg::Svg::new(svg::Handle::from_memory(svg_tabler(nome).into_bytes()))
-        .width(tamanho)
-        .height(tamanho)
-        .style(|_, _| svg::Style { color: Some(crate::tema::COR_TEXTO()) })
+pub fn icone_traco(nome: &str, tamanho: f32) -> SvgView {
+    svg(carregar(svg_tabler(nome))).color(crate::tema::COR_TEXTO()).width(tamanho).height(tamanho)
 }
 
 /// Variante cromática para ações de destaque. Os SVGs do Ribbon conservam
 /// suas cores próprias; a cor de destaque aplica-se apenas aos ícones Tabler.
 /// A cor é restrita às usadas na identidade visual da suíte.
-pub fn icone_colorido(nome: &str, tamanho: f32, cor: &str) -> svg::Svg<'static, iced::Theme> {
+pub fn icone_colorido(nome: &str, tamanho: f32, cor: &str) -> SvgView {
     let cor = match cor {
         "#21865c" | "#2179a7" | "#d68126" | "#7d5cc6" | "#ca5555" => cor,
         _ => "#21865c",
@@ -153,12 +150,8 @@ pub fn icone_colorido(nome: &str, tamanho: f32, cor: &str) -> svg::Svg<'static, 
     if svg_ribbon(nome).is_some() {
         return icone(nome, tamanho);
     }
-    let original = svg_embutido(nome);
-    let desenho = original.replacen("stroke=\"#808080\"", &format!("stroke=\"{cor}\""), 1);
-    svg::Svg::new(svg::Handle::from_memory(desenho.into_bytes()))
-        .width(tamanho)
-        .height(tamanho)
-        .style(|_, _| svg::Style { color: None })
+    let desenho = svg_embutido(nome).replacen("stroke=\"#808080\"", &format!("stroke=\"{cor}\""), 1);
+    svg(carregar(desenho)).width(tamanho).height(tamanho)
 }
 
 #[cfg(test)]

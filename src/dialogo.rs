@@ -36,8 +36,11 @@
 //!     .sobre(base)
 //! ```
 
-use iced::widget::{button, column, container, mouse_area, opaque, row, stack, text, Space};
-use iced::{Alignment, Background, Border, Element, Font, Length, Shadow, Vector};
+use pelicano::{
+    button, column, container, mouse_area, opaque, row, scrollable, stack, text, tooltip, Align, Border, Captured,
+    DrawCx, Element, Event, EventCx, Font, LayoutCx, Length, Limits, Node, Padding, Point, Shadow, Size, Space, Style,
+    Theme, TooltipPosition, Widget,
+};
 
 use crate::tema::{
     estilo_botao_pequeno, estilo_botao_primario, estilo_botao_secundario, COR_BORDA,
@@ -61,43 +64,59 @@ const RESERVA_RODAPE: f32 = 54.0;
 /// Espaçamento padrão entre os blocos do diálogo.
 pub const ESPACO: f32 = 12.0;
 
-fn semibold() -> Font {
-    Font { weight: iced::font::Weight::Semibold, ..Font::default() }
-}
-
 /// Estilo do painel do diálogo: fundo do painel, borda fina, raio 12, sombra.
-pub fn estilo_painel(_tema: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL())),
-        text_color: Some(COR_TEXTO()),
-        border: Border { color: COR_BORDA(), width: 1.0, radius: 12.0.into() },
-        shadow: Shadow { color: COR_SOMBRA(), offset: Vector::new(0.0, 6.0), blur_radius: 22.0 },
-    }
+pub fn estilo_painel(_tema: &Theme) -> Style {
+    Style::default()
+        .background(COR_PAINEL())
+        .text_color(COR_TEXTO())
+        .border(Border::rounded(12.0).color(COR_BORDA(), 1.0))
+        .shadow(Shadow { color: COR_SOMBRA(), offset: Point::new(0.0, 6.0), blur: 22.0 })
 }
 
 /// Estilo do véu atrás do diálogo.
-pub fn estilo_veu(_tema: &iced::Theme) -> container::Style {
-    container::Style { background: Some(Background::Color(COR_VEU())), ..container::Style::default() }
+pub fn estilo_veu(_tema: &Theme) -> Style {
+    Style::default().background(COR_VEU())
 }
 
 /// Bloco discreto (fundo da faixa, raio 9) para agrupar linhas no corpo.
-pub fn estilo_bloco(_tema: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(COR_PAINEL_FAIXA())),
-        border: Border { color: COR_BORDA_SUAVE(), width: 1.0, radius: 9.0.into() },
-        ..container::Style::default()
-    }
+pub fn estilo_bloco(_tema: &Theme) -> Style {
+    Style::default().background(COR_PAINEL_FAIXA()).border(Border::rounded(9.0).color(COR_BORDA_SUAVE(), 1.0))
 }
 
 /// Botão "fechar" do cabeçalho: ícone `x` do Tabler, dica "Fechar (Esc)".
 pub fn botao_fechar<'a, M: Clone + 'a + 'static>(msg: M) -> Element<'a, M> {
-    crate::formatacao::dica(
-        button(crate::icones::icone("x", 15.0))
-            .padding([5, 7])
-            .style(estilo_botao_pequeno(false))
-            .on_press(msg),
-        "Fechar (Esc)",
-    )
+    let botao = button(crate::icones::icone("x", 15.0)).padding([5, 7]).style(estilo_botao_pequeno(false)).on_press(msg);
+    let botao: Element<'a, M> = tooltip(botao, "Fechar (Esc)", TooltipPosition::Bottom).padding([4, 8]).style(crate::tema::estilo_dica).into();
+    botao.access_label("Fechar")
+}
+
+/// Teto de altura (o `max-height` do CSS): o pelicano só tem `max_width` no contêiner.
+struct Teto<'a, M> {
+    filho: Element<'a, M>,
+    altura: f32,
+}
+
+impl<M> Widget<M> for Teto<'_, M> {
+    fn size(&self) -> (Length, Length) {
+        self.filho.widget().size()
+    }
+    fn layout(&self, cx: &mut LayoutCx, l: Limits) -> Node {
+        let n = cx.child(0, &self.filho, Limits::new(Size::new(l.max.width, l.max.height.min(self.altura))));
+        Node { rect: n.rect, key: cx.key(), children: vec![n], ..Default::default() }
+    }
+    fn draw(&self, n: &Node, cx: &mut DrawCx) {
+        self.filho.widget().draw(&n.children[0], cx)
+    }
+    fn event(&self, n: &Node, ev: &Event, cx: &mut EventCx<M>) -> Captured {
+        self.filho.widget().event(&n.children[0], ev, cx)
+    }
+    fn opaque_at(&self, n: &Node, p: Point) -> bool {
+        self.filho.widget().opaque_at(&n.children[0], p)
+    }
+}
+
+fn com_teto<'a, M: 'a>(filho: impl Into<Element<'a, M>>, altura: f32) -> Element<'a, M> {
+    Element::new(Teto { filho: filho.into(), altura })
 }
 
 /// Botão de rodapé no estilo primário (ação principal, uma por diálogo).
@@ -123,7 +142,7 @@ pub fn botao_secundario<'a, M: Clone + 'a>(rotulo: impl Into<String>, msg: Optio
 pub fn secao<'a, M: 'a>(titulo: &str) -> Element<'a, M> {
     text(titulo.to_uppercase())
         .size(10.5)
-        .font(semibold())
+        .font(Font::SEMIBOLD)
         .color(COR_TEXTO_MUTED())
         .into()
 }
@@ -133,14 +152,14 @@ pub fn secao<'a, M: 'a>(titulo: &str) -> Element<'a, M> {
 pub fn linha_rotulo_valor<'a, M: 'a>(rotulo: impl Into<String>, valor: impl Into<String>) -> Element<'a, M> {
     container(
         row![
-            text(rotulo.into()).size(12.5).color(COR_TEXTO_MUTED()).width(Length::Fill),
+            text(rotulo.into()).size(12.5).color(COR_TEXTO_MUTED()).width(Length::FILL),
             text(valor.into()).size(13).color(COR_TEXTO()),
         ]
         .spacing(10)
-        .align_y(Alignment::Center),
+        .align(Align::Center),
     )
     .padding([3, 0])
-    .width(Length::Fill)
+    .width(Length::FILL)
     .into()
 }
 
@@ -154,13 +173,13 @@ pub fn grade_rotulo_valor<'a, M: 'a>(pares: Vec<(String, String)>, colunas: usiz
         let mut linha = row![].spacing(22);
         for _ in 0..colunas {
             linha = match iter.next() {
-                Some((r, v)) => linha.push(container(linha_rotulo_valor(r, v)).width(Length::Fill)),
-                None => linha.push(Space::with_width(Length::Fill)),
+                Some((r, v)) => linha.push(container(linha_rotulo_valor(r, v)).width(Length::FILL)),
+                None => linha.push(Space::new(Length::FILL, 0)),
             };
         }
         linhas = linhas.push(linha);
     }
-    container(linhas).padding([6, 12]).width(Length::Fill).style(estilo_bloco).into()
+    container(linhas).padding([6, 12]).width(Length::FILL).style(estilo_bloco).into()
 }
 
 /// Aviso de conteúdo vazio: ícone `info-circle` apagado + frase, num bloco
@@ -174,13 +193,13 @@ pub fn aviso<'a, M: 'a>(icone: &str, texto: impl Into<String>) -> Element<'a, M>
     container(
         row![
             crate::icones::icone(icone, 17.0),
-            text(texto.into()).size(12.5).color(COR_TEXTO_MUTED()).width(Length::Fill),
+            text(texto.into()).size(12.5).color(COR_TEXTO_MUTED()).width(Length::FILL),
         ]
         .spacing(9)
-        .align_y(Alignment::Center),
+        .align(Align::Center),
     )
     .padding([10, 12])
-    .width(Length::Fill)
+    .width(Length::FILL)
     .style(estilo_bloco)
     .into()
 }
@@ -191,19 +210,17 @@ pub fn aviso<'a, M: 'a>(icone: &str, texto: impl Into<String>) -> Element<'a, M>
 const CANAL_BARRA: f32 = 10.0;
 
 /// Rolagem do corpo: altura pelo conteúdo (Shrink) e barra que só aparece
-/// quando o conteúdo passa do teto (a barra "embutida" de `tema::rolagem`
-/// desenha o trilho sempre). As folgas de 3 px em cima e embaixo evitam que o
+/// quando o conteúdo passa do teto. As folgas de 3 px em cima e embaixo evitam que o
 /// recorte da camada coma o acento de uma letra maiúscula (Ã) da primeira linha
 /// e a borda do último bloco.
 pub fn rolagem<'a, M: 'a>(corpo: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    use iced::widget::scrollable::{Direction, Scrollbar};
-    iced::widget::scrollable(
+    scrollable(
         container(corpo.into())
-            .width(Length::Fill)
-            .padding(iced::Padding { top: 3.0, bottom: 3.0, right: CANAL_BARRA, left: 0.0 }),
+            .width(Length::FILL)
+            .padding(Padding { top: 3.0, bottom: 3.0, right: CANAL_BARRA, left: 0.0 }),
     )
-    .direction(Direction::Vertical(Scrollbar::new().width(6).scroller_width(6)))
-    .width(Length::Fill)
+    .width(Length::FILL)
+    .height(Length::Shrink)
     .into()
 }
 
@@ -393,12 +410,12 @@ impl<'a, M: Clone + 'a + 'static> Dialogo<'a, M> {
         let teto = self.teto_efetivo();
         let Dialogo { titulo, icone, subtitulo, corpo, fechar, esquerda, botoes, rolar, .. } = self;
 
-        let mut cabecalho = row![].spacing(9).align_y(Alignment::Center);
+        let mut cabecalho = row![].spacing(9).align(Align::Center);
         if let Some(nome) = icone {
             cabecalho = cabecalho.push(crate::icones::icone(&nome, 19.0));
         }
         cabecalho = cabecalho
-            .push(text(titulo).size(17).font(semibold()).color(COR_TEXTO()).width(Length::Fill));
+            .push(text(titulo).size(17).font(Font::SEMIBOLD).color(COR_TEXTO()).width(Length::FILL));
         if let Some(msg) = fechar {
             cabecalho = cabecalho.push(botao_fechar(msg));
         }
@@ -408,29 +425,29 @@ impl<'a, M: Clone + 'a + 'static> Dialogo<'a, M> {
         }
 
         let corpo: Element<'a, M> = if rolar {
-            container(rolagem(corpo)).max_height(teto_corpo).into()
+            com_teto(rolagem(corpo), teto_corpo)
         } else {
-            container(corpo).padding(iced::Padding { right: CANAL_BARRA, ..iced::Padding::ZERO }).into()
+            container(corpo).padding(Padding { right: CANAL_BARRA, ..Padding::ZERO }).into()
         };
-        let topo = container(topo).padding(iced::Padding { right: CANAL_BARRA, ..iced::Padding::ZERO });
+        let topo = container(topo).padding(Padding { right: CANAL_BARRA, ..Padding::ZERO });
         let mut tudo = column![topo, corpo].spacing(ESPACO + 2.0);
         if !botoes.is_empty() || !esquerda.is_empty() {
-            let mut rodape = row![].spacing(8).align_y(Alignment::Center);
+            let mut rodape = row![].spacing(8).align(Align::Center);
             for e in esquerda {
                 rodape = rodape.push(e);
             }
-            rodape = rodape.push(Space::with_width(Length::Fill));
+            rodape = rodape.push(Space::new(Length::FILL, 0));
             for b in botoes {
                 rodape = rodape.push(b);
             }
-            tudo = tudo.push(container(rodape).padding(iced::Padding { right: CANAL_BARRA, ..iced::Padding::ZERO }));
+            tudo = tudo.push(container(rodape).padding(Padding { right: CANAL_BARRA, ..Padding::ZERO }));
         }
-        container(tudo)
-            .padding(iced::Padding { top: 18.0, bottom: 18.0, left: 20.0, right: 20.0 - CANAL_BARRA })
-            .width(Length::Fixed(largura))
-            .max_height(teto)
-            .style(estilo_painel)
-            .into()
+        let painel = container(tudo)
+            .padding(Padding { top: 18.0, bottom: 18.0, left: 20.0, right: 20.0 - CANAL_BARRA })
+            .width(largura)
+            .clip(true)
+            .style(estilo_painel);
+        com_teto(painel, teto)
     }
 
     /// O diálogo sobre `base`: véu, painel centralizado na horizontal e
@@ -443,30 +460,30 @@ impl<'a, M: Clone + 'a + 'static> Dialogo<'a, M> {
         let fechar_fora = if self.fora_fecha { self.fechar.clone() } else { None };
         let painel = self.painel();
 
-        let posicionado = container(opaque(painel)).width(Length::Fill);
+        let posicionado = container(opaque(painel)).width(Length::FILL);
         let posicionado = if a_direita {
-            posicionado.align_x(iced::alignment::Horizontal::Right).padding([0.0, 2.0 * MARGEM])
+            posicionado.align_x(Align::End).padding([0.0, 2.0 * MARGEM])
         } else {
-            posicionado.align_x(iced::alignment::Horizontal::Center)
+            posicionado.align_x(Align::Center)
         };
-        let camada = column![Space::with_height(Length::Fixed(topo.max(0.0))), posicionado]
-            .width(Length::Fill)
-            .height(Length::Fill);
+        let camada = column![Space::new(0, topo.max(0.0)), posicionado]
+            .width(Length::FILL)
+            .height(Length::FILL);
         let base: Element<'a, M> = base.into();
         if !modal {
-            return stack![base, camada].width(Length::Fill).height(Length::Fill).into();
+            return stack![base, camada].width(Length::FILL).height(Length::FILL).into();
         }
-        let fundo = container(Space::new(Length::Fill, Length::Fill))
-            .width(Length::Fill)
-            .height(Length::Fill);
+        let fundo = container(Space::new(Length::FILL, Length::FILL))
+            .width(Length::FILL)
+            .height(Length::FILL);
         let fundo = if veu { fundo.style(estilo_veu) } else { fundo };
         let mut area_fora = mouse_area(fundo);
         if let Some(msg) = fechar_fora {
             area_fora = area_fora.on_press(msg);
         }
         stack![base, opaque(area_fora), camada]
-            .width(Length::Fill)
-            .height(Length::Fill)
+            .width(Length::FILL)
+            .height(Length::FILL)
             .into()
     }
 }
@@ -474,7 +491,7 @@ impl<'a, M: Clone + 'a + 'static> Dialogo<'a, M> {
 #[cfg(test)]
 mod testes {
     use super::*;
-    use iced::widget::column;
+    use pelicano::column;
 
     #[derive(Debug, Clone, PartialEq)]
     enum Msg {
@@ -499,12 +516,12 @@ mod testes {
             .rodape_esquerda(text("3 itens"))
             .topo(200.0)
             .altura_janela(700.0)
-            .sobre(Space::new(Length::Fill, Length::Fill));
+            .sobre(Space::new(Length::FILL, Length::FILL));
         let _: Element<'_, Msg> = Dialogo::new("Não modal", text("x"))
             .ao_fechar(Msg::Fechar)
             .nao_modal()
             .a_direita()
-            .sobre(Space::new(Length::Fill, Length::Fill));
+            .sobre(Space::new(Length::FILL, Length::FILL));
     }
 
     #[test]
@@ -523,6 +540,16 @@ mod testes {
         assert!(d.teto_corpo() < sem_rodape, "rodapé tira espaço do corpo");
         let d: Dialogo<'_, Msg> = Dialogo::new("T", text("x")).altura_maxima(400.0).altura_janela(2000.0);
         assert_eq!(d.teto_efetivo(), 400.0, "janela grande não passa do teto pedido");
+    }
+
+    #[test]
+    fn corpo_alto_rola_dentro_do_teto() {
+        let corpo = pelicano::column((0..80).map(|i| linha_rotulo_valor::<Msg>(format!("L{i}"), "1"))).spacing(4);
+        let d: Dialogo<'_, Msg> = Dialogo::new("T", corpo).altura_maxima(400.0).primario("Ok", Some(Msg::Ok));
+        let painel = d.painel();
+        let no = pelicano::layout(&painel, Size::new(800.0, 2000.0), &mut pelicano::Renderer::new(), &Default::default(), &crate::tema::tema());
+        assert!(no.rect.height <= 400.0 && no.rect.height > 300.0, "{}", no.rect.height);
+        assert_eq!(no.rect.width, LARGURA_PADRAO);
     }
 
     #[test]

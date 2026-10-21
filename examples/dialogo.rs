@@ -3,8 +3,8 @@
 //! `cargo run --example dialogo`: um botão abre o diálogo; o x, o Cancelar,
 //! o clique no véu e o Esc fecham.
 use feather_ui::dialogo::{self as dlg, Dialogo};
-use iced::widget::{button, column, container, text};
-use iced::{keyboard, Element, Length, Subscription};
+use pelicano::column;
+use pelicano::{button, container, text, App, Element, Event, Key, Length, NamedKey, Settings, Style, Task, Theme};
 
 #[derive(Default)]
 struct Exemplo {
@@ -19,8 +19,10 @@ enum Msg {
     Aplicar,
 }
 
-impl Exemplo {
-    fn update(&mut self, msg: Msg) {
+impl App for Exemplo {
+    type Msg = Msg;
+
+    fn update(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::Abrir => self.aberto = true,
             Msg::Fechar => self.aberto = false,
@@ -29,24 +31,21 @@ impl Exemplo {
                 self.aberto = false;
             }
         }
+        Task::none()
     }
 
     fn view(&self) -> Element<'_, Msg> {
         let base = container(
             column![
                 text(format!("Aplicado {} vez(es)", self.aplicado)),
-                button(text("Abrir diálogo")).on_press(Msg::Abrir)
-                    .style(feather_ui::tema::estilo_botao_primario),
+                button(text("Abrir diálogo")).on_press(Msg::Abrir).style(feather_ui::tema::estilo_botao_primario),
             ]
             .spacing(12),
         )
         .padding(24)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(feather_ui::tema::COR_FUNDO_JANELA())),
-            ..Default::default()
-        });
+        .width(Length::FILL)
+        .height(Length::FILL)
+        .style(|_| Style::default().background(feather_ui::tema::COR_FUNDO_JANELA()));
         if !self.aberto {
             return base.into();
         }
@@ -76,17 +75,18 @@ impl Exemplo {
             .sobre(base)
     }
 
-    fn subscription(&self) -> Subscription<Msg> {
-        keyboard::on_key_press(|tecla, _| match tecla {
-            keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Msg::Fechar),
+    fn theme(&self) -> Theme {
+        feather_ui::tema::tema()
+    }
+
+    fn on_event(&self, ev: &Event) -> Option<Msg> {
+        match ev {
+            Event::Key { key: Key::Named(NamedKey::Escape), pressed: true, .. } => Some(Msg::Fechar),
             _ => None,
-        })
+        }
     }
 }
 
-fn main() -> iced::Result {
-    iced::application("Diálogo interno", Exemplo::update, Exemplo::view)
-        .subscription(Exemplo::subscription)
-        .theme(|_| feather_ui::tema::tema_iced())
-        .run()
+fn main() -> Result<(), pelicano::Error> {
+    pelicano::run(Settings { title: "Diálogo interno".into(), ..Default::default() }, || (Exemplo::default(), Task::none()))
 }

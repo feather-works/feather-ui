@@ -4,8 +4,7 @@
 use super::*;
 use crate::{consulta, icones, tema};
 use crate::consulta::estilo_cartao as estilo_card;
-use iced::widget::{button, column, container, row, scrollable, svg, text, text_input, Space};
-use iced::{Alignment, Background, Border, Element, Font, Length, Theme};
+use pelicano::{button, column, container, horizontal_space, row, scrollable, text, text_input, Align, Border, Element, Font, Length, Style, Theme};
 
 #[derive(Clone)]
 struct Guia {
@@ -18,27 +17,8 @@ fn texto_negrito(nome: impl Into<String>, tamanho: f32) -> Element<'static, Even
     consulta::negrito(nome, tamanho)
 }
 
-fn barra() -> container::Style {
-    container::Style {
-        background: Some(Background::Color(tema::COR_PAINEL())),
-        border: Border {
-            color: tema::COR_BORDA_SUAVE(),
-            width: 1.,
-            radius: 12.0.into(),
-        },
-        ..Default::default()
-    }
-}
-fn superficie_sidebar(_: &Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(tema::COR_PAINEL_FAIXA())),
-        border: Border {
-            color: tema::COR_BORDA_SUAVE(),
-            width: 1.,
-            ..Default::default()
-        },
-        ..Default::default()
-    }
+fn barra(_: &Theme) -> Style {
+    Style::default().background(tema::COR_PAINEL()).border(Border::rounded(12.0).color(tema::COR_BORDA_SUAVE(), 1.))
 }
 
 fn icone_hero() -> Element<'static, Evento> {
@@ -104,7 +84,7 @@ fn navega(catalogo: &Catalogo, estado: &Estado) -> Element<'static,Evento> {
     let outros_indices=(0..primeiro.topicos.len()).filter(|i|
         !basico.contains(i)&&!avancado.contains(i)&&!outros.contains(i)
     ).collect::<Vec<_>>();
-    let group=|nav: iced::widget::Column<'static,Evento>,
+    let group=|nav: pelicano::Column<'static,Evento>,
                    titulo: &'static str, itens: &[usize]| {
         if itens.is_empty(){return nav;}
         let mut nav=nav.push(rotulo_nav(titulo));
@@ -148,11 +128,10 @@ fn home(catalogo: &Catalogo) -> Element<'static, Evento> {
         icone_hero(),
         column![
             texto_negrito(secao.titulo.clone(), 24.),
-            text(intro).size(13).line_height(1.45)
-                .color(tema::COR_TEXTO_MUTED()),
-        ].spacing(12).width(Length::Fill),
+            text(intro).size(13).color(tema::COR_TEXTO_MUTED()).line_height(1.45),
+        ].spacing(12).width(Length::FILL),
         if secao.topicos.iter().any(|t|t.id=="apresentar") {ilustra_apresentacao()}else{ilustra_planilha()},
-    ].spacing(18).align_y(Alignment::Center);
+    ].spacing(18).align(Align::Center);
     let ordem=["comecar","formatar","tabelas","graficos","dados","macros","funcoes","config","atalhos"];
     let mut itens=Vec::new();
     for id in ordem {
@@ -189,8 +168,8 @@ fn home(catalogo: &Catalogo) -> Element<'static, Evento> {
             quick=quick.push(button(row![
                 icones::icone(icone,14.),
                 text(titulo).size(11.5),
-            ].spacing(6).align_y(Alignment::Center))
-                .style(estilo_card).padding([8,9])
+            ].spacing(6).align(Align::Center))
+                .style(estilo_card).padding([8u16,9])
                 .on_press(Evento::IrTopico(0,i)));
         }
     }
@@ -198,14 +177,10 @@ fn home(catalogo: &Catalogo) -> Element<'static, Evento> {
         hero,
         texto_negrito("Tópicos principais", 18.),
         grade_de_cards(&itens,3),
-        container(Space::with_height(Length::Fixed(1.)))
-            .width(Length::Fill).style(|_|container::Style {
-                background:Some(Background::Color(tema::COR_BORDA_SUAVE())),
-                ..Default::default()
-            }),
+        consulta::divisor(),
         texto_negrito("Guias rápidos", 18.),
         quick,
-    ].spacing(17).width(Length::Fill).into()
+    ].spacing(17).width(Length::FILL).into()
 }
 fn botao_copiar(texto: &str, copiado: Option<&str>) -> Element<'static, Evento> {
     let feito = copiado == Some(texto);
@@ -224,20 +199,17 @@ fn ver_topico(topico: &Topico, copiado: Option<&str>) -> Element<'static, Evento
             Linha::Marcador(s)=>row![text("•"),text(s.clone()).size(14.).line_height(1.5)]
                 .spacing(9).into(),
             Linha::Atalho{descricao,tecla}=>row![
-                text(descricao.clone()).size(13.).width(Length::FillPortion(3)),
-                text(tecla.clone()).size(13.).font(Font::MONOSPACE)
-                    .width(Length::FillPortion(2)),
+                text(descricao.clone()).size(13.).width(Length::Fill(3)),
+                text(tecla.clone()).size(13.).font(Font::MONO)
+                    .width(Length::Fill(2)),
             ].spacing(9).into(),
             Linha::Exemplo(s)=>container(row![
-                    text(s.clone()).size(13.).font(Font::MONOSPACE).width(Length::Fill),
+                    text(s.clone()).size(13.).font(Font::MONO).width(Length::FILL),
                     botao_copiar(s, copiado),
-                ].spacing(10).align_y(Alignment::Start))
-                .padding(14).width(Length::Fill)
-                .style(|_|container::Style {
-                    background:Some(Background::Color(tema::COR_PAINEL_FAIXA())),
-                    border:Border {radius:8.0.into(), ..Default::default()},
-                    ..Default::default()
-                }).into(),
+                ].spacing(10).align(Align::Start))
+                .padding(14.).width(Length::FILL)
+                .style(|_|Style::default().background(tema::COR_PAINEL_FAIXA()).border(Border::rounded(8.0)))
+                .into(),
         };
         body=body.push(elemento);
     }
@@ -294,63 +266,48 @@ fn paginacao(catalogo: &Catalogo,estado: &Estado)->Element<'static,Evento> {
             && estado.topico==last.topicos.len().checked_sub(1));
     row![
         button(text(format!("‹ {}",catalogo.anterior)).size(12.))
-            .padding([8,13]).style(estilo_card)
+            .padding([8u16,13]).style(estilo_card)
             .on_press_maybe(previous.then_some(Evento::Anterior)),
-        Space::with_width(Length::Fill),
+        horizontal_space(),
         button(text(format!("{} ›",catalogo.proximo)).size(12.))
-            .padding([8,13]).style(crate::tema::estilo_botao_primario)
+            .padding([8u16,13]).style(crate::tema::estilo_botao_primario)
             .on_press_maybe((!is_last).then_some(Evento::Proximo)),
-    ].spacing(10).align_y(Alignment::Center).into()
+    ].spacing(10).align(Align::Center).into()
 }
 impl Catalogo {
     pub fn view<'a>(&'a self,estado:&'a Estado)->Element<'a,Evento> {
-        let sidebar=container(scrollable(
-            column![navega(self,estado)].spacing(4)
-                .padding([14,12]).width(Length::Fill).height(Length::Shrink)
-        ).height(Length::Fill))
-            .width(Length::Fixed(255.))
-            .height(Length::Fill).style(superficie_sidebar);
+        let sidebar=consulta::lateral(column![navega(self,estado)].spacing(4), None);
         let pesquisa=row![
             icones::icone("search",18.),
-            text_input(&self.busca_rotulo,&estado.busca)
-                .id(iced::widget::text_input::Id::new(ID_BUSCA))
+            text_input(self.busca_rotulo.as_str(),estado.busca.as_str())
+                .id(ID_BUSCA)
                 .on_input(Evento::Buscar)
-                .padding(8).size(14.)
-                .style(|theme,status|{
-                    let mut estilo=text_input::default(theme,status);
-                    estilo.background=Background::Color(tema::COR_PAINEL());
-                    estilo.border=Border::default();
-                    estilo
-                }).width(Length::Fill),
+                .padding(8.).size(14.)
+                .style(|_,_| Style::default().background(tema::COR_PAINEL()).text_color(tema::COR_TEXTO()))
+                .width(Length::FILL),
             container(text("Ctrl + F").size(10.5).color(tema::COR_TEXTO_MUTED()))
-                .padding([5,8]).style(|_|container::Style {
-                    background:Some(Background::Color(tema::COR_PAINEL_FAIXA())),
-                    border:Border {color:tema::COR_BORDA(),width:1.,radius:6.0.into()},
-                    ..Default::default()
-                }),
-        ].spacing(10).align_y(Alignment::Center);
-        let busca=container(pesquisa).padding([6,12]).width(Length::Fill)
-            .style(|_|barra());
-        // O viewport rola e preenche a janela; seu CONTEÚDO deve ter
-        // altura Shrink. Iced 0.13 entra em panic se receber Fill aqui.
+                .padding([5u16,8]).style(|_|Style::default()
+                    .background(tema::COR_PAINEL_FAIXA())
+                    .border(Border::rounded(6.0).color(tema::COR_BORDA(),1.))),
+        ].spacing(10).align(Align::Center);
+        let busca=container(pesquisa).padding([6u16,12]).width(Length::FILL).style(barra);
         let rolagem=scrollable(container(conteudo(self,estado))
-            .padding([18, 8]).width(Length::Fill).height(Length::Shrink))
-            .height(Length::Fill).width(Length::Fill);
-        let mut leitor=column![busca,rolagem].spacing(10)
-            .padding([16,20]).width(Length::Fill).height(Length::Fill);
-        if estado.busca.trim().is_empty() {
-            leitor=leitor.push(paginacao(self,estado));
-        }
+            .padding([18u16, 8]).width(Length::FILL));
+        let leitor=column![busca,rolagem].spacing(10)
+            .padding([16u16,20]).width(Length::FILL).height(Length::FILL)
+            .push_maybe(estado.busca.trim().is_empty().then(|| paginacao(self,estado)));
         row![
             sidebar,
-            container(leitor).width(Length::Fill)
-                .height(Length::Fill)
-                .style(|_|container::Style {
-                    background:Some(Background::Color(tema::COR_PAINEL())),
-                    ..Default::default()
-                }),
-        ].height(Length::Fill).width(Length::Fill).into()
+            container(leitor).width(Length::FILL)
+                .height(Length::FILL)
+                .style(|_|Style::default().background(tema::COR_PAINEL())),
+        ].height(Length::FILL).width(Length::FILL).into()
     }
+}
+
+fn ilustra_apresentacao()->Element<'static,Evento>{
+    let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 170 115\"><rect x=\"4\" y=\"8\" width=\"162\" height=\"96\" rx=\"10\" fill=\"{}\" stroke=\"#dce4e9\"/><rect x=\"12\" y=\"18\" width=\"30\" height=\"22\" rx=\"3\" fill=\"#dce4e9\"/><rect x=\"12\" y=\"46\" width=\"30\" height=\"22\" rx=\"3\" fill=\"#dce4e9\"/><rect x=\"50\" y=\"18\" width=\"106\" height=\"76\" rx=\"5\" fill=\"#fff\"/><path d=\"M65 40h60M65 53h45M65 66h55\" stroke=\"{}\" stroke-width=\"5\" stroke-linecap=\"round\"/></svg>",if tema::escuro(){"#33363b"}else{"#f1f3f4"},tema::acento_hex());
+    pelicano::svg(icones::carregar(svg)).width(170.).height(115.).into()
 }
 
 #[cfg(test)]
@@ -362,9 +319,9 @@ mod testes_visual {
         // center_y recebe a dimensão final, não apenas o alinhamento.
         // Fill neste elemento provocava overflow em cosmic-text ao pressionar F1.
         let cabecalho = icone_hero();
-        let dimensao = cabecalho.as_widget().size();
-        assert_eq!(dimensao.width, Length::Fixed(96.));
-        assert_eq!(dimensao.height, Length::Fixed(96.));
+        let (largura, altura) = cabecalho.widget().size();
+        assert_eq!(largura, Length::Fixed(96.));
+        assert_eq!(altura, Length::Fixed(96.));
     }
     #[test]
     fn scroll_ajuda_aceita_home_topico_busca_sem_fill_vertical() {
@@ -388,6 +345,12 @@ mod testes_visual {
         let _: Element<'_, Evento> = catalogo.view(&estado);
         estado.busca="primeiros".into();
         let _: Element<'_, Evento> = catalogo.view(&estado);
+        estado.busca.clear();
+        estado.topico=None;
+        // Desenha a página inicial de verdade: layout com rolagem não pode estourar.
+        let png=pelicano::capture(&catalogo.view(&estado), pelicano::Size::new(900., 600.), 1.0,
+            &tema::tema(), &mut pelicano::Renderer::new(), None);
+        assert!(!png.is_empty());
     }
 
     #[test]
@@ -411,9 +374,4 @@ mod testes_visual {
         assert!(icones::existe("file-plus"));
         assert!(icones::existe("search"));
     }
-}
-
-fn ilustra_apresentacao()->Element<'static,Evento>{
-    let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 170 115\"><rect x=\"4\" y=\"8\" width=\"162\" height=\"96\" rx=\"10\" fill=\"{}\" stroke=\"#dce4e9\"/><rect x=\"12\" y=\"18\" width=\"30\" height=\"22\" rx=\"3\" fill=\"#dce4e9\"/><rect x=\"12\" y=\"46\" width=\"30\" height=\"22\" rx=\"3\" fill=\"#dce4e9\"/><rect x=\"50\" y=\"18\" width=\"106\" height=\"76\" rx=\"5\" fill=\"#fff\"/><path d=\"M65 40h60M65 53h45M65 66h55\" stroke=\"{}\" stroke-width=\"5\" stroke-linecap=\"round\"/></svg>",if tema::escuro(){"#33363b"}else{"#f1f3f4"},tema::acento_hex());
-    svg::Svg::new(svg::Handle::from_memory(svg.into_bytes())).width(170).height(115).into()
 }

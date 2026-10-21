@@ -4,8 +4,7 @@
 //! A escolha de fonte, tamanho, cor ou borda é sempre uma mensagem do consumidor.
 //! Não guarda estilos de células, documentos ou formas e não importa motores.
 
-use iced::widget::{button, column, container, row, text, tooltip, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length, Shadow, Vector};
+use pelicano::{button, column, container, row, text, tooltip, Align, Border, Color, Element, Font, Point, Shadow, Space, Style, TooltipPosition};
 
 use crate::{componentes::lista_tipada, icones, seletor_cor, tema};
 
@@ -35,23 +34,16 @@ impl EstadoPopover {
     }
 }
 
-/// Dica acessível visualmente, com fundo, borda e tema unificados.
+/// Dica acessível: balão do pelicano e o mesmo texto como nome para o leitor de tela.
 pub fn dica<'a, M: Clone + 'a>(
     conteudo: impl Into<Element<'a, M>>,
     descricao: &str,
 ) -> Element<'a, M> {
-    tooltip(
-        conteudo,
-        container(text(descricao.to_owned()).size(12))
-            .padding([4, 8])
-            .style(tema::estilo_dica),
-        tooltip::Position::Bottom,
-    )
-    .into()
+    Element::from(tooltip(conteudo, descricao.to_owned(), TooltipPosition::Bottom).padding([4, 8]).style(tema::estilo_dica)).access_label(descricao.to_owned())
 }
 
 /// Superfície de popover. Posicionamento e overlay permanecem com o aplicativo
-/// para preservar recorte, foco e limites da janela Iced em cada editor.
+/// para preservar recorte, foco e limites da janela em cada editor.
 pub fn popover<'a, M: 'a>(
     titulo: &str,
     conteudo: Element<'a, M>,
@@ -59,23 +51,15 @@ pub fn popover<'a, M: 'a>(
     container(
         column![text(titulo.to_owned()).size(12), conteudo]
             .spacing(8)
-            .align_x(Alignment::Start),
+            .align(Align::Start),
     )
     .padding(10)
-    .width(Length::Shrink)
-    .style(|_| container::Style {
-        background: Some(Background::Color(tema::COR_PAINEL())),
-        text_color: Some(tema::COR_TEXTO()),
-        border: Border {
-            color: tema::COR_BORDA(),
-            width: 1.0,
-            radius: 8.0.into(),
-        },
-        shadow: Shadow {
-            color: Color::from_rgba8(0, 0, 0, 0.22),
-            offset: Vector::new(0.0, 4.0),
-            blur_radius: 12.0,
-        },
+    .style(|_| {
+        Style::default()
+            .background(tema::COR_PAINEL())
+            .text_color(tema::COR_TEXTO())
+            .border(Border::rounded(8.0).color(tema::COR_BORDA(), 1.0))
+            .shadow(Shadow { color: Color::BLACK.alpha(0.22), offset: Point::new(0.0, 4.0), blur: 12.0 })
     })
     .into()
 }
@@ -91,8 +75,7 @@ pub fn botao_cor<'a, M: Clone + 'a>(
 ) -> Element<'a, M> {
     let valido = seletor_cor::hex_valido(hex);
     let cor = if valido {
-        let [r, g, b, a] = seletor_cor::rgba_de(hex);
-        Some(Color::from_rgba8(r, g, b, a as f32 / 255.0))
+        Some(cor_de(hex))
     } else {
         None
     };
@@ -105,21 +88,19 @@ pub fn botao_cor<'a, M: Clone + 'a>(
             text("").size(11)
         },
     )
-    .width(Length::Fixed(16.0))
-    .height(Length::Fixed(16.0))
-    .align_x(Alignment::Center)
-    .align_y(Alignment::Center)
-    .style(move |_| container::Style {
-        background: cor.map(Background::Color),
-        border: Border {
-            color: tema::COR_BORDA(),
-            width: 1.0,
-            radius: 3.0.into(),
-        },
-        ..Default::default()
+    .width(16)
+    .height(16)
+    .align_x(Align::Center)
+    .align_y(Align::Center)
+    .style(move |_| {
+        let s = Style::default().border(Border::rounded(3.0).color(tema::COR_BORDA(), 1.0));
+        match cor {
+            Some(c) => s.background(c),
+            None => s,
+        }
     });
     button(row![amostra, text(rotulo.to_owned()).size(11)]
-        .spacing(5).align_y(Alignment::Center))
+        .spacing(5).align(Align::Center))
         .padding([4, 7])
         .style(tema::estilo_botao_pequeno(ativo))
         .on_press_maybe(mensagem)
@@ -147,8 +128,7 @@ pub fn botao_cor_compacto<'a, M: Clone + 'a>(
     ativo: bool,
 ) -> Element<'a, M> {
     let cor = if seletor_cor::hex_valido(hex) {
-        let [r, g, b, a] = seletor_cor::rgba_de(hex);
-        Color::from_rgba8(r, g, b, a as f32 / 255.0)
+        cor_de(hex)
     } else {
         // Sem estilo direto: mostrar o fundo e o texto padrões do tema.
         // Não gravar estas cores como formatação da célula.
@@ -157,40 +137,26 @@ pub fn botao_cor_compacto<'a, M: Clone + 'a>(
             TipoCorCompacta::Texto => tema::COR_TEXTO(),
         }
     };
-    let amostra = container(Space::with_height(Length::Fixed(4.0)))
-        .width(Length::Fixed(20.0))
-        .height(Length::Fixed(4.0))
-        .style(move |_| container::Style {
-            background: Some(Background::Color(cor)),
-            border: Border {
-                color: tema::COR_BORDA(),
-                width: 0.6,
-                radius: 1.0.into(),
-            },
-            ..Default::default()
-        });
+    let amostra = container(Space::new(0, 4))
+        .width(20)
+        .height(4)
+        .style(move |_| Style::default().background(cor).border(Border::rounded(1.0).color(tema::COR_BORDA(), 0.6)));
     let (icone, descricao): (Element<'a, M>, &str) = match tipo {
         TipoCorCompacta::Preenchimento => (
             icones::icone("bucket", 18.0).into(),
             "Cor de preenchimento da célula",
         ),
         TipoCorCompacta::Texto => (
-            text("A")
-                .size(18)
-                .font(iced::Font {
-                    weight: iced::font::Weight::Bold,
-                    ..iced::Font::DEFAULT
-                })
-                .into(),
+            text("A").size(18).font(Font::BOLD).into(),
             "Cor do texto",
         ),
     };
     let controle = button(
         column![icone, amostra]
             .spacing(1)
-            .align_x(Alignment::Center),
+            .align(Align::Center),
     )
-    .width(Length::Fixed(32.0))
+    .width(32)
     .padding([2, 5])
     .style(tema::estilo_botao_pequeno(ativo))
     .on_press_maybe(mensagem);
@@ -247,41 +213,26 @@ pub fn previa_estilo<'a, M: 'a>(
     tamanho: f32,
     negrito: bool,
 ) -> Element<'a, M> {
-    let cor = if seletor_cor::hex_valido(cor_hex) {
-        let [r, g, b, a] = seletor_cor::rgba_de(cor_hex);
-        Color::from_rgba8(r, g, b, a as f32 / 255.0)
-    } else {
-        tema::COR_TEXTO()
-    };
-    let fonte = iced::Font {
-        weight: if negrito {
-            iced::font::Weight::Bold
-        } else {
-            iced::font::Weight::Normal
-        },
-        ..iced::Font::DEFAULT
-    };
+    let cor = if seletor_cor::hex_valido(cor_hex) { cor_de(cor_hex) } else { tema::COR_TEXTO() };
+    let fonte = if negrito { Font::BOLD } else { Font::DEFAULT };
     container(
         column![
             text(amostra.to_owned())
                 .size(if tamanho.is_finite() { tamanho.clamp(6.0, 96.0) } else { 12.0 })
                 .font(fonte)
                 .color(cor),
-            Space::with_height(1),
+            Space::new(0, 1),
         ]
         .spacing(2),
     )
     .padding([6, 8])
-    .style(|_| container::Style {
-        background: Some(Background::Color(tema::COR_PAINEL())),
-        border: Border {
-            color: tema::COR_BORDA(),
-            width: 1.0,
-            radius: 4.0.into(),
-        },
-        ..Default::default()
-    })
+    .style(|_| Style::default().background(tema::COR_PAINEL()).border(Border::rounded(4.0).color(tema::COR_BORDA(), 1.0)))
     .into()
+}
+
+fn cor_de(hex: &str) -> Color {
+    let [r, g, b, a] = seletor_cor::rgba_de(hex);
+    Color::rgb8(r, g, b).alpha(a as f32 / 255.0)
 }
 
 #[cfg(test)]

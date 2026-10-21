@@ -1,4 +1,4 @@
-//! Ajuda nativa Iced compartilhada pela suíte (UI-013).
+//! Ajuda nativa compartilhada pela suíte (UI-013).
 //! O conteúdo é fornecido pelos aplicativos: nenhum JS/DOM, motor ou idioma
 //! concreto entra no componente. A busca cruza seções e ignora acentos.
 mod visual;
@@ -60,8 +60,8 @@ pub enum Evento {
 
 /// Campo de busca da janela F1 (Ctrl+F focaliza este campo).
 pub const ID_BUSCA: &str = "featheroffice-ajuda-busca";
-pub fn focar_busca<M: Clone + 'static>() -> iced::Task<M> {
-    iced::widget::text_input::focus(iced::widget::text_input::Id::new(ID_BUSCA))
+pub fn focar_busca<M: Send + 'static>() -> pelicano::Task<M> {
+    pelicano::Task::focus(ID_BUSCA)
 }
 
 /// Unicode pt-BR com acentos canônicos/mais comuns; não depende da locale do SO.

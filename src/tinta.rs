@@ -9,11 +9,12 @@
 //! Esc é do aplicativo (sai do modo desenho), não da camada.
 use std::time::Instant;
 
-use iced::mouse;
-use iced::touch;
-use iced::widget::canvas::{self, event, Frame, Geometry, LineCap, LineDash, LineJoin, Path, Program, Stroke};
-use iced::widget::{button, column, container, mouse_area, opaque, row, stack, text, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Theme};
+use pelicano::widget::CursorIcon;
+use pelicano::{
+    button, column, container, horizontal_space, mouse_area, opaque, program, row, stack, text, Align, Border, Captured, Color,
+    Element, Event, FillRule, Font, Length, LineCap, LineJoin, MouseButton, Padding, Path, Point, Program, Rect, Renderer, Size,
+    Space, Status, Stroke, Style, Theme,
+};
 
 use crate::componentes::{botao_grande, botao_pequeno, grupo_faixa_compacto};
 use crate::icones::icone;
@@ -200,8 +201,8 @@ impl Estado {
     }
 }
 
-fn cor_iced(c: [u8; 4]) -> Color {
-    Color::from_rgba8(c[0], c[1], c[2], f32::from(c[3]) / 255.0)
+fn cor_rgba(c: [u8; 4]) -> Color {
+    Color::rgb8(c[0], c[1], c[2]).alpha(f32::from(c[3]) / 255.0)
 }
 
 // ------------------------------------------------------------------ faixa
@@ -209,24 +210,20 @@ fn cor_iced(c: [u8; 4]) -> Color {
 /// Botão de caneta: ícone com a cor e a espessura embaixo, e a seta que
 /// abre o menu de cor/espessura.
 fn botao_pena<'a>(estado: &Estado, f: Ferramenta) -> Element<'a, Evento> {
-    let Some(pena) = estado.pena_de(f) else { return Space::with_width(0).into() };
+    let Some(pena) = estado.pena_de(f) else { return Space::new(0, 0).into() };
     let ativo = estado.ativo && estado.ferramenta == f;
     let nome_icone = if f == Ferramenta::MarcaTexto { "highlight" } else { "pencil" };
-    let cor = cor_iced(pena.cor);
+    let cor = cor_rgba(pena.cor);
     let altura = (pena.espessura / if f == Ferramenta::MarcaTexto { 4.0 } else { 1.2 }).clamp(3.0, 6.0);
-    let amostra = container(Space::with_height(altura)).width(22.0).style(move |_| container::Style {
-        background: Some(Background::Color(cor)),
-        border: Border { color: COR_BORDA(), width: 0.6, radius: 1.0.into() },
-        ..Default::default()
-    });
-    let principal = button(column![icone(nome_icone, 22.0), amostra].spacing(3).align_x(Alignment::Center))
-        .width(Length::Fixed(44.0))
-        .padding([5, 6])
+    let amostra = container(Space::new(22.0, altura)).style(move |_| Style::default().background(cor).border(Border::rounded(1.0).color(COR_BORDA(), 0.6)));
+    let principal = button(column![icone(nome_icone, 22.0), amostra].spacing(3).align(Align::Center))
+        .width(44.0)
+        .padding([5u16, 6])
         .style(estilo_botao_grande(ativo))
         .on_press(Evento::Escolher(f));
-    let seta = button(container(icone("chevron-down", 12.0)).center_x(Length::Fill))
-        .width(Length::Fixed(44.0))
-        .padding([1, 4])
+    let seta = button(container(icone("chevron-down", 12.0)).width(Length::FILL).align_x(Align::Center))
+        .width(44.0)
+        .padding([1u16, 4])
         .style(estilo_botao_pequeno(estado.menu == Some(f)))
         .on_press(Evento::AlternarMenu(f));
     let dica = crate::idioma::tf("{} (clique de novo para cor e espessura)", &[&crate::idioma::t(f.rotulo())]);
@@ -242,7 +239,7 @@ pub fn grupos_faixa<'a>(estado: &Estado) -> Vec<Element<'a, Evento>> {
         botao_pena(estado, Ferramenta::MarcaTexto),
     ]
     .spacing(3)
-    .align_y(Alignment::Center);
+    .align(Align::Center);
     let ativo = |f: Ferramenta| estado.ativo && estado.ferramenta == f;
     let borrachas = column![
         botao_pequeno(icone("eraser", 17.0), crate::idioma::t("Borracha de traço"), Some(Evento::Escolher(Ferramenta::BorrachaTraco)), ativo(Ferramenta::BorrachaTraco)),
@@ -262,7 +259,7 @@ pub fn grupos_faixa<'a>(estado: &Estado) -> Vec<Element<'a, Evento>> {
         )
     };
     vec![
-        grupo_faixa_compacto(row![canetas, borrachas].spacing(8).align_y(Alignment::Center).into(), crate::idioma::t("Ferramentas de desenho")),
+        grupo_faixa_compacto(row![canetas, borrachas].spacing(8).align(Align::Center).into(), crate::idioma::t("Ferramentas de desenho")),
         grupo_faixa_compacto(
             crate::formatacao::dica(
                 botao_grande(icone("wand", 23.0), crate::idioma::t("Tinta para forma"), Some(Evento::AlternarFormas), estado.tinta_para_forma),
@@ -288,50 +285,38 @@ pub fn menu_pena<'a>(estado: &Estado) -> Option<Element<'a, Evento>> {
     };
     let amostra = |c: [u8; 4]| {
         let escolhida = c == pena.cor;
-        button(Space::new(Length::Fixed(20.0), Length::Fixed(20.0)))
-            .padding(0)
-            .on_press(Evento::Cor(f, c))
-            .style(move |_: &Theme, status| button::Style {
-                background: Some(Background::Color(cor_iced(c))),
-                border: Border {
-                    color: if escolhida || matches!(status, button::Status::Hovered) { COR_AZUL_ACENTO() } else { COR_BORDA() },
-                    width: if escolhida { 2.5 } else { 1.0 },
-                    radius: 5.0.into(),
-                },
-                ..Default::default()
-            })
+        button(Space::new(20.0, 20.0)).padding(0u16).on_press(Evento::Cor(f, c)).style(move |_: &Theme, status| {
+            let borda = if escolhida || status == Status::Hovered { COR_AZUL_ACENTO() } else { COR_BORDA() };
+            Style::default().background(cor_rgba(c)).border(Border::rounded(5.0).color(borda, if escolhida { 2.5 } else { 1.0 }))
+        })
     };
     let mut cores = column![].spacing(6);
     for linha in paleta.chunks(6) {
         cores = cores.push(row(linha.iter().map(|&c| amostra(c).into())).spacing(6));
     }
-    let cor_linha = cor_iced(pena.cor);
+    let cor_linha = cor_rgba(pena.cor);
     let mut grossuras = column![].spacing(2);
     for &e in espessuras {
-        let traco = container(Space::with_height((e * 0.8).clamp(1.0, 14.0))).width(70.0).style(move |_| container::Style {
-            background: Some(Background::Color(cor_linha)),
-            border: Border { radius: 3.0.into(), ..Default::default() },
-            ..Default::default()
-        });
+        let traco = container(Space::new(70.0, (e * 0.8).clamp(1.0, 14.0))).style(move |_| Style::default().background(cor_linha).border(Border::rounded(3.0)));
         grossuras = grossuras.push(
-            button(row![container(traco).width(80.0).center_y(16.0), text(format!("{e} px")).size(12)].spacing(8).align_y(Alignment::Center))
-                .width(Length::Fill)
-                .padding([4, 8])
+            button(row![container(traco).width(80.0).height(16.0).align_y(Align::Center), text(format!("{e} px")).size(12)].spacing(8).align(Align::Center))
+                .width(Length::FILL)
+                .padding([4u16, 8])
                 .style(estilo_botao_pequeno(e == pena.espessura))
                 .on_press(Evento::Espessura(f, e)),
         );
     }
     let corpo = column![
-        row![text(crate::idioma::t(f.rotulo())).size(14), Space::with_width(Length::Fill), botao_fechar(Evento::FecharMenu)]
-            .align_y(Alignment::Center),
+        row![text(crate::idioma::t(f.rotulo())).size(14), horizontal_space(), botao_fechar(Evento::FecharMenu)]
+            .align(Align::Center),
         text(crate::idioma::t("COR")).size(10.5).color(COR_TEXTO_MUTED()),
         cores,
         text(crate::idioma::t("ESPESSURA")).size(10.5).color(COR_TEXTO_MUTED()),
         grossuras,
     ]
     .spacing(8)
-    .padding(12)
-    .width(Length::Fixed(196.0));
+    .padding(12u16)
+    .width(196.0);
     Some(container(corpo).style(estilo_popup_menu).into())
 }
 
@@ -348,9 +333,9 @@ pub fn sobrepor_menu<'a, M: Clone + 'a>(
     let Some(menu) = menu_pena(estado) else { return base };
     let x = x.min(janela.width - 208.0).max(8.0);
     let y = y.min(janela.height - 420.0).max(8.0);
-    let fora = mouse_area(Space::new(Length::Fill, Length::Fill)).on_press(mapear(Evento::FecharMenu));
-    let posicionado = column![Space::with_height(y), row![Space::with_width(x), opaque(menu.map(mapear))]];
-    stack![base, fora, posicionado].width(Length::Fill).height(Length::Fill).into()
+    let fora = mouse_area(Space::new(Length::FILL, Length::FILL)).on_press(mapear(Evento::FecharMenu));
+    let posicionado = column![Space::new(0, y), row![Space::new(x, 0), opaque(menu.map(mapear))]];
+    stack![base, fora, posicionado].width(Length::FILL).height(Length::FILL).into()
 }
 
 // ------------------------------------------------------------------ camada
@@ -429,14 +414,14 @@ pub enum EventoCamada {
 /// Raio da borracha na tela, em pixels.
 pub const RAIO_BORRACHA_TELA: f32 = 8.0;
 
-/// Camada transparente de tinta (`canvas`). Fora do modo desenho
+/// Camada transparente de tinta (`program`). Fora do modo desenho
 /// (`ferramenta = None`) só desenha e deixa todo evento passar.
 pub struct Camada<M> {
     pub tracos: Vec<TracoTela>,
     pub transformacao: Transformacao,
     /// Área útil (relativa ao widget) onde desenha e captura. `None` = o
     /// widget inteiro menos as `margens` (cabeçalhos, barras de rolagem).
-    pub area: Option<Rectangle>,
+    pub area: Option<Rect>,
     pub margens: Padding,
     pub ferramenta: Option<Ferramenta>,
     /// Pena da prévia ao vivo (cor com opacidade, espessura no documento).
@@ -453,7 +438,7 @@ pub struct Camada<M> {
     pub velocidade_previa: Option<f32>,
     /// Indicador ao vivo da pressão durante o traço (modo de teste).
     pub mostrar_pressao: bool,
-    /// Traço da caneta em andamento lido por fora do Iced (XInput2; ver
+    /// Traço da caneta em andamento lido por fora da janela (XInput2; ver
     /// [`GestoTinta`]). A camada só desenha a prévia; quem o conduz é o app.
     pub gesto_externo: Option<GestoTinta>,
     /// A ponta da caneta lida por fora risca nesta camada (padrão). `false`
@@ -490,19 +475,21 @@ impl<M> Camada<M> {
         }
     }
     /// Onde a ponta da caneta lida por fora risca (coordenadas da janela).
-    fn zona_caneta(&self, bounds: Rectangle) -> Option<crate::caneta::ZonaTinta> {
-        let area = self.area_em(bounds);
+    fn zona_caneta(&self, bounds: Rect) -> Option<crate::caneta::ZonaTinta> {
         let capta = self.capturar_caneta && (self.ferramenta.is_some() || self.caneta_automatica);
-        capta.then(|| crate::caneta::ZonaTinta {
-            area: Rectangle::new(Point::new(bounds.x + area.x, bounds.y + area.y), area.size()),
-            origem: bounds.position(),
-        })
+        capta.then(|| crate::caneta::ZonaTinta { area: self.area_na_janela(bounds), origem: Point::new(bounds.x, bounds.y) })
     }
 
-    fn area_em(&self, bounds: Rectangle) -> Rectangle {
+    /// A área útil em coordenadas da janela.
+    fn area_na_janela(&self, bounds: Rect) -> Rect {
+        let area = self.area_em(bounds);
+        Rect::new(Point::new(bounds.x + area.x, bounds.y + area.y), area.size())
+    }
+
+    fn area_em(&self, bounds: Rect) -> Rect {
         self.area.unwrap_or_else(|| {
             let m = self.margens;
-            Rectangle::new(
+            Rect::new(
                 Point::new(m.left, m.top),
                 Size::new((bounds.width - m.left - m.right).max(0.0), (bounds.height - m.top - m.bottom).max(0.0)),
             )
@@ -520,22 +507,21 @@ pub struct EstadoCamada {
 
 /// Diagnóstico da caneta: anota os eventos crus de mouse e toque que a
 /// camada recebe (movimentos só contados, para não inundar o diário).
-fn anotar_evento_cru(evento: &canvas::Event, estado: &mut EstadoCamada, cursor: mouse::Cursor) {
+fn anotar_evento_cru(evento: &Event, estado: &mut EstadoCamada, cursor: Option<Point>) {
     if !crate::caneta::diagnostico_ligado() {
         return;
     }
     let descricao = match evento {
-        canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+        Event::CursorMoved(_) => {
             estado.movimentos_soltos += 1;
             return;
         }
-        canvas::Event::Mouse(mouse::Event::WheelScrolled { .. }) => return,
-        canvas::Event::Mouse(e) => format!("mouse {e:?}"),
-        canvas::Event::Touch(e) => format!("toque {e:?}"),
+        Event::MousePressed(_) | Event::MouseReleased(_) | Event::CursorLeft => format!("mouse {evento:?}"),
+        Event::FingerPressed { .. } | Event::FingerMoved { .. } | Event::FingerLifted { .. } | Event::FingerLost { .. } => format!("toque {evento:?}"),
         _ => return,
     };
     let movimentos = std::mem::take(&mut estado.movimentos_soltos);
-    let posicao = cursor.position().map(|p| format!("({:.0}, {:.0})", p.x, p.y)).unwrap_or_else(|| "fora".into());
+    let posicao = cursor.map(|p| format!("({:.0}, {:.0})", p.x, p.y)).unwrap_or_else(|| "fora".into());
     crate::caneta::anotar(|| format!("[camada] {descricao} no cursor {posicao}; {movimentos} movimentos antes"));
 }
 
@@ -545,19 +531,19 @@ fn decimal_br(v: f32) -> String {
 }
 
 /// Gesto de tinta em andamento (pontos no documento). A camada usa um
-/// por dentro para o mouse/toque; o app usa outro para a caneta lida por
-/// fora do Iced ([`crate::caneta::ToqueCaneta`]), com a mesma regra.
+/// por dentro para o mouse; o app usa outro para a caneta lida por
+/// fora da janela ([`crate::caneta::ToqueCaneta`]), com a mesma regra.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GestoTinta {
     ferramenta: Ferramenta,
     inicio: Instant,
     pontos: Vec<PontoCaptura>,
     /// Quando cada ponto chegou (para casar a pressão de novo ao soltar:
-    /// a amostra da mesa pode chegar um pouco depois do evento do Iced).
+    /// a amostra da mesa pode chegar um pouco depois do evento da janela).
     instantes: Vec<Instant>,
     ultimo_tela: Point,
     /// Botão que começou o traço (a ponta da caneta pode chegar como outro botão).
-    botao: Option<mouse::Button>,
+    botao: Option<MouseButton>,
     /// Movimentos recebidos desde o último registro do diagnóstico.
     movimentos: u32,
     /// Veio da leitura por fora: a pressão de cada ponto já é a exata.
@@ -572,7 +558,7 @@ impl GestoTinta {
         transformacao: Transformacao,
         instante: Instant,
         pressao: Option<f32>,
-        botao: Option<mouse::Button>,
+        botao: Option<MouseButton>,
     ) -> (Self, Option<EventoCamada>) {
         let doc = transformacao.para_documento(p_tela);
         let gesto = Self {
@@ -593,7 +579,7 @@ impl GestoTinta {
         (gesto, evento)
     }
 
-    /// Gesto da caneta lida por fora do Iced (pressão exata por ponto).
+    /// Gesto da caneta lida por fora da janela (pressão exata por ponto).
     pub fn comecar_externo(
         ferramenta: Ferramenta,
         p_tela: Point,
@@ -604,6 +590,33 @@ impl GestoTinta {
         let (mut g, e) = Self::comecar(ferramenta, p_tela, transformacao, instante, pressao, None);
         g.externo = true;
         (g, e)
+    }
+
+    /// Conduz o traço da caneta lida por fora com um toque dela (o app chama
+    /// para cada [`crate::caneta::ToqueCaneta`] do lote). `origem` = canto da
+    /// camada na janela (o da [`crate::caneta::ZonaTinta`]). Só o toque que
+    /// encostou na tinta começa; a ponta de borracha apaga traços.
+    pub fn conduzir(
+        gesto: &mut Option<Self>,
+        toque: &crate::caneta::ToqueCaneta,
+        ferramenta: Ferramenta,
+        origem: Point,
+        transformacao: Transformacao,
+        fonte: Option<&FontePressao>,
+    ) -> Option<EventoCamada> {
+        use crate::caneta::FaseToque;
+        let p = Point::new(toque.posicao.x - origem.x, toque.posicao.y - origem.y);
+        match toque.fase {
+            FaseToque::Encostou if toque.na_tinta && gesto.is_none() => {
+                let f = if toque.borracha { Ferramenta::BorrachaTraco } else { ferramenta };
+                let (g, e) = Self::comecar_externo(f, p, transformacao, toque.instante, toque.pressao);
+                *gesto = Some(g);
+                e
+            }
+            FaseToque::Moveu => gesto.as_mut()?.mover(p, transformacao, toque.instante, toque.pressao),
+            FaseToque::Levantou => Some(gesto.take()?.terminar(fonte)),
+            _ => None,
+        }
     }
 
     pub fn ferramenta(&self) -> Ferramenta {
@@ -626,7 +639,7 @@ impl GestoTinta {
         if self.externo && self.pontos.len() == 1 && self.pontos[0].pressao.is_none() {
             self.pontos[0].pressao = pressao;
         }
-        if self.ultimo_tela.distance(p_tela) < 0.75 {
+        if (self.ultimo_tela.x - p_tela.x).hypot(self.ultimo_tela.y - p_tela.y) < 0.75 {
             return None;
         }
         self.ultimo_tela = p_tela;
@@ -642,7 +655,7 @@ impl GestoTinta {
     }
 
     /// Fecha o gesto: o traço, o fim do apagar ou o laço. Para o gesto do
-    /// Iced, casa a pressão de novo com tudo o que já chegou da mesa; o
+    /// mouse, casa a pressão de novo com tudo o que já chegou da mesa; o
     /// externo só completa os pontos que ficaram sem.
     pub fn terminar(mut self, fonte: Option<&FontePressao>) -> EventoCamada {
         if let Some(fonte) = fonte {
@@ -699,7 +712,7 @@ impl<M> Camada<M> {
         self.fonte_pressao.as_ref().and_then(|f| f.pressao_em(instante))
     }
 
-    fn comecar(&self, estado: &mut EstadoCamada, p_tela: Point, ferramenta: Ferramenta, botao: Option<mouse::Button>) -> Option<M> {
+    fn comecar(&self, estado: &mut EstadoCamada, p_tela: Point, ferramenta: Ferramenta, botao: Option<MouseButton>) -> Option<M> {
         let agora = Instant::now();
         let (gesto, evento) = GestoTinta::comecar(ferramenta, p_tela, self.transformacao, agora, self.pressao_agora(agora), botao);
         estado.gesto = Some(gesto);
@@ -714,18 +727,18 @@ impl<M> Camada<M> {
 
     fn terminar(&self, estado: &mut EstadoCamada) -> Option<M> {
         let gesto = estado.gesto.take()?;
-        // A caneta encostou durante este gesto do Iced: o traço dela vem
+        // A caneta encostou durante este gesto do mouse: o traço dela vem
         // pela leitura por fora (o app); este, igual, seria duplicado.
         if let Some(fonte) = self.fonte_pressao.as_ref().filter(|f| f.entrega_toques()) {
             if fonte.encostou_desde(gesto.inicio().checked_sub(TOLERANCIA_CANETA).unwrap_or(gesto.inicio())) {
-                crate::caneta::anotar(|| "[camada] gesto do Iced descartado: era a caneta (traço pela leitura X11)".into());
+                crate::caneta::anotar(|| "[camada] gesto do mouse descartado: era a caneta (traço pela leitura X11)".into());
                 return gesto.ferramenta().apaga().then(|| (self.mapear)(EventoCamada::ApagarFim));
             }
         }
         Some((self.mapear)(gesto.terminar(self.fonte_pressao.as_ref())))
     }
 
-    /// O clique do Iced é da ponta da caneta que a leitura por fora já
+    /// O clique da janela é da ponta da caneta que a leitura por fora já
     /// conduz? (encostada agora, ou encostou há pouco).
     fn clique_e_da_caneta(&self) -> bool {
         self.capturar_caneta && self.fonte_pressao.as_ref().is_some_and(|f| {
@@ -735,7 +748,7 @@ impl<M> Camada<M> {
     }
 }
 
-/// Distância no tempo entre o clique do Iced e o encostar lido por fora
+/// Distância no tempo entre o clique da janela e o encostar lido por fora
 /// para considerar os dois o mesmo toque da caneta.
 const TOLERANCIA_CANETA: std::time::Duration = std::time::Duration::from_millis(300);
 
@@ -768,7 +781,8 @@ impl<M> Camada<M> {
     }
 
     /// "pressão 0,63" (mesa), "velocidade 0,45" (sem mesa) ou "sem pressão".
-    fn desenhar_indicador(&self, f: &mut Frame, gesto: &GestoTinta) {
+    /// `canto` = o canto da área útil na janela.
+    fn desenhar_indicador(&self, r: &mut Renderer, canto: Point, gesto: &GestoTinta) {
         let ultimo = gesto.pontos.last().copied();
         let texto = match ultimo.and_then(|p| p.pressao) {
             Some(p) => format!("pressão {}", decimal_br(p)),
@@ -783,179 +797,147 @@ impl<M> Camada<M> {
             None => texto,
         };
         let largura = linha.chars().count() as f32 * 6.6 + 16.0;
-        f.fill_rectangle(Point::new(6.0, 6.0), Size::new(largura, 22.0), COR_PAINEL());
-        f.stroke(
-            &Path::rectangle(Point::new(6.0, 6.0), Size::new(largura, 22.0)),
-            Stroke::default().with_color(COR_BORDA()).with_width(1.0),
-        );
-        f.fill_text(canvas::Text {
-            content: linha,
-            position: Point::new(14.0, 11.0),
-            color: COR_TEXTO(),
-            size: 12.0.into(),
-            ..canvas::Text::default()
-        });
+        let caixa = Rect::new(Point::new(canto.x + 6.0, canto.y + 6.0), Size::new(largura, 22.0));
+        r.fill_quad(caixa, Some(&COR_PAINEL().into()), Border::default().color(COR_BORDA(), 1.0), None);
+        r.draw_text(&linha, 12.0, Font::DEFAULT, COR_TEXTO(), Point::new(canto.x + 14.0, canto.y + 11.0), None);
     }
-}
 
-impl<M> Program<M> for Camada<M> {
-    type State = EstadoCamada;
-
-    fn update(&self, estado: &mut EstadoCamada, evento: canvas::Event, bounds: Rectangle, cursor: mouse::Cursor) -> (event::Status, Option<M>) {
+    /// O evento da janela: se a camada fica com ele e a mensagem a publicar.
+    fn atualizar(&self, estado: &mut EstadoCamada, evento: &Event, bounds: Rect, cursor: Option<Point>) -> (Captured, Option<M>) {
         let Some(ferramenta) = self.ferramenta else {
             estado.gesto = None;
-            return (event::Status::Ignored, None);
+            return (Captured::No, None);
         };
-        anotar_evento_cru(&evento, estado, cursor);
+        anotar_evento_cru(evento, estado, cursor);
         let area = self.area_em(bounds);
         let local = |p: Point| Point::new(p.x - bounds.x, p.y - bounds.y);
         match evento {
             // A ponta da caneta chega como botão esquerdo (XWayland, Windows)
             // ou, conforme o compositor, como outro botão (BTN_TOUCH/BTN_STYLUS
             // = `Other(n)`): os dois começam o traço. Direito/meio/voltar não.
-            canvas::Event::Mouse(mouse::Event::ButtonPressed(botao @ (mouse::Button::Left | mouse::Button::Other(_))))
-                if estado.gesto.is_none() =>
-            {
-                match cursor.position_in(bounds) {
+            Event::MousePressed(botao @ (MouseButton::Left | MouseButton::Other(_))) if estado.gesto.is_none() => {
+                match cursor.filter(|p| bounds.contains(*p)).map(local) {
                     // A ponta da caneta encostada: o traço vem da leitura por
                     // fora (o app); aqui só não deixa o clique passar à grade.
                     Some(p) if area.contains(p) && self.clique_e_da_caneta() => {
-                        crate::caneta::anotar(|| "[camada] clique do Iced é da caneta: fica com a leitura X11".into());
-                        (event::Status::Captured, None)
+                        crate::caneta::anotar(|| "[camada] clique da janela é da caneta: fica com a leitura X11".into());
+                        (Captured::Yes, None)
                     }
                     // Modo ligado pela caneta: o mouse volta à seleção normal.
-                    Some(p) if area.contains(p) && self.mouse_sai_do_modo => (event::Status::Ignored, None),
-                    Some(p) if area.contains(p) => {
-                        let msg = self.comecar(estado, p, ferramenta, Some(botao));
-                        (event::Status::Captured, msg)
-                    }
-                    _ => (event::Status::Ignored, None),
+                    Some(p) if area.contains(p) && self.mouse_sai_do_modo => (Captured::No, None),
+                    Some(p) if area.contains(p) => (Captured::Yes, self.comecar(estado, p, ferramenta, Some(*botao))),
+                    _ => (Captured::No, None),
                 }
             }
-            canvas::Event::Mouse(mouse::Event::CursorMoved { position }) if estado.gesto.is_some() => {
-                let msg = self.mover(estado, local(position));
-                (event::Status::Captured, msg)
+            Event::CursorMoved(p) if estado.gesto.is_some() => (Captured::Yes, self.mover(estado, local(*p))),
+            Event::MouseReleased(botao) if estado.gesto.as_ref().is_some_and(|g| g.botao == Some(*botao)) => {
+                (Captured::Yes, self.terminar(estado))
             }
-            canvas::Event::Mouse(mouse::Event::ButtonReleased(botao))
-                if estado.gesto.as_ref().is_some_and(|g| g.botao == Some(botao)) =>
-            {
-                let msg = self.terminar(estado);
-                (event::Status::Captured, msg)
-            }
-            canvas::Event::Touch(touch::Event::FingerPressed { position, .. }) => {
-                let p = local(position);
-                if area.contains(p) && bounds.contains(position) && estado.gesto.is_none() {
-                    let msg = self.comecar(estado, p, ferramenta, None);
-                    (event::Status::Captured, msg)
+            // Capturar o dedo também impede o pelicano de repeti-lo como mouse (não risca duas vezes).
+            Event::FingerPressed { position, .. } => {
+                let p = local(*position);
+                if area.contains(p) && bounds.contains(*position) && estado.gesto.is_none() {
+                    (Captured::Yes, self.comecar(estado, p, ferramenta, None))
                 } else {
-                    (event::Status::Ignored, None)
+                    (Captured::No, None)
                 }
             }
-            canvas::Event::Touch(touch::Event::FingerMoved { position, .. }) if estado.gesto.is_some() => {
-                let msg = self.mover(estado, local(position));
-                (event::Status::Captured, msg)
-            }
-            canvas::Event::Touch(touch::Event::FingerLifted { .. } | touch::Event::FingerLost { .. })
-                if estado.gesto.is_some() =>
-            {
-                let msg = self.terminar(estado);
-                (event::Status::Captured, msg)
-            }
-            _ => (event::Status::Ignored, None),
+            Event::FingerMoved { position, .. } if estado.gesto.is_some() => (Captured::Yes, self.mover(estado, local(*position))),
+            Event::FingerLifted { .. } | Event::FingerLost { .. } if estado.gesto.is_some() => (Captured::Yes, self.terminar(estado)),
+            _ => (Captured::No, None),
         }
     }
+}
 
-    fn draw(&self, estado: &EstadoCamada, renderer: &Renderer, _: &Theme, bounds: Rectangle, cursor: mouse::Cursor) -> Vec<Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        let area = self.area_em(bounds);
+impl<M> Program<M> for Camada<M> {
+    type State = EstadoCamada;
+
+    fn update(&self, estado: &mut EstadoCamada, evento: &Event, bounds: Rect, cursor: Option<Point>, publicar: &mut dyn FnMut(M)) -> Captured {
+        let (pegou, msg) = self.atualizar(estado, evento, bounds, cursor);
+        if let Some(m) = msg {
+            publicar(m);
+        }
+        pegou
+    }
+
+    fn draw(&self, estado: &EstadoCamada, r: &mut Renderer, bounds: Rect, _: &Theme, cursor: Option<Point>) {
         let t = self.transformacao;
         // A leitura por fora da caneta precisa saber onde a camada captura
         // (coordenadas da janela) para decidir entre traço e clique.
         if let Some(fonte) = &self.fonte_pressao {
             fonte.definir_zona_tinta(self.zona_caneta(bounds));
         }
-        frame.with_clip(area, |f| {
-            // O recorte desloca a origem para o canto da área.
-            let ajuste = |p: Point| {
-                let q = t.para_tela(p);
-                Point::new(q.x - area.x, q.y - area.y)
-            };
-            for traco in &self.tracos {
-                if traco.contorno.is_empty() {
-                    desenhar_traco(f, &traco.pontos, ajuste, traco.cor, traco.espessura * t.escala, traco.reto, traco.marca_texto);
-                } else {
-                    desenhar_contorno(f, &traco.contorno, ajuste, traco.cor);
+        let recorte = self.area_na_janela(bounds);
+        r.push_clip(recorte, [0.0; 4]);
+        let ajuste = |p: Point| {
+            let q = t.para_tela(p);
+            Point::new(q.x + bounds.x, q.y + bounds.y)
+        };
+        for traco in &self.tracos {
+            if traco.contorno.is_empty() {
+                desenhar_traco(r, &traco.pontos, ajuste, traco.cor, traco.espessura * t.escala, traco.reto, traco.marca_texto);
+            } else {
+                desenhar_contorno(r, &traco.contorno, ajuste, traco.cor);
+            }
+        }
+        if !self.selecionados.is_empty() {
+            let pts = self
+                .tracos
+                .iter()
+                .filter(|tr| self.selecionados.contains(&tr.id))
+                .flat_map(|tr| tr.pontos.iter().map(|&p| ajuste(p)));
+            if let Some(caixa) = caixa_de(pts) {
+                let margem = 4.0;
+                let fora = Rect::new(Point::new(caixa.x - margem, caixa.y - margem), Size::new(caixa.width + 2.0 * margem, caixa.height + 2.0 * margem));
+                if let Some(c) = Path::rect(fora) {
+                    r.stroke_path(&c, &tracejado(1.2, &[5.0, 4.0]), COR_AZUL_ACENTO());
                 }
             }
-            if !self.selecionados.is_empty() {
-                let pts = self
-                    .tracos
-                    .iter()
-                    .filter(|tr| self.selecionados.contains(&tr.id))
-                    .flat_map(|tr| tr.pontos.iter().map(|&p| ajuste(p)));
-                if let Some(caixa) = caixa_de(pts) {
-                    let margem = 4.0;
-                    let r = Path::rectangle(
-                        Point::new(caixa.x - margem, caixa.y - margem),
-                        Size::new(caixa.width + 2.0 * margem, caixa.height + 2.0 * margem),
-                    );
-                    f.stroke(&r, tracejado(1.2, &[5.0, 4.0]));
-                }
-            }
-            if let Some(gesto) = estado.gesto.as_ref().or(self.gesto_externo.as_ref()) {
-                let pts: Vec<Point> = gesto.pontos.iter().map(|p| Point::new(p.x, p.y)).collect();
-                if gesto.ferramenta.desenha() {
-                    if let Some((cor, espessura)) = self.pena {
-                        let marca = gesto.ferramenta == Ferramenta::MarcaTexto;
-                        match (!marca).then(|| self.fatores_previa(&gesto.pontos)).flatten() {
-                            Some(fatores) => desenhar_previa_variavel(f, &pts, &fatores, ajuste, cor, espessura * t.escala),
-                            None => desenhar_traco(f, &pts, ajuste, cor, espessura * t.escala, false, marca),
-                        }
-                    }
-                    if self.mostrar_pressao {
-                        self.desenhar_indicador(f, gesto);
-                    }
-                } else if gesto.ferramenta == Ferramenta::Laco && pts.len() > 1 {
-                    let caminho = Path::new(|b| {
-                        b.move_to(ajuste(pts[0]));
-                        for &p in &pts[1..] {
-                            b.line_to(ajuste(p));
-                        }
-                    });
-                    f.stroke(&caminho, tracejado(1.4, &[6.0, 4.0]));
-                }
-            }
-            // Borracha: círculo do alcance sob o cursor.
-            if self.ferramenta.is_some_and(Ferramenta::apaga) {
-                if let Some(p) = cursor.position_in(bounds) {
-                    if area.contains(p) {
-                        let c = Path::circle(Point::new(p.x - area.x, p.y - area.y), RAIO_BORRACHA_TELA);
-                        f.stroke(&c, Stroke::default().with_color(COR_TEXTO_MUTED()).with_width(1.2));
+        }
+        if let Some(gesto) = estado.gesto.as_ref().or(self.gesto_externo.as_ref()) {
+            let pts: Vec<Point> = gesto.pontos.iter().map(|p| Point::new(p.x, p.y)).collect();
+            if gesto.ferramenta.desenha() {
+                if let Some((cor, espessura)) = self.pena {
+                    let marca = gesto.ferramenta == Ferramenta::MarcaTexto;
+                    match (!marca).then(|| self.fatores_previa(&gesto.pontos)).flatten() {
+                        Some(fatores) => desenhar_previa_variavel(r, &pts, &fatores, ajuste, cor, espessura * t.escala),
+                        None => desenhar_traco(r, &pts, ajuste, cor, espessura * t.escala, false, marca),
                     }
                 }
+                if self.mostrar_pressao {
+                    self.desenhar_indicador(r, Point::new(recorte.x, recorte.y), gesto);
+                }
+            } else if gesto.ferramenta == Ferramenta::Laco && pts.len() > 1 {
+                let tela: Vec<Point> = pts.iter().map(|&p| ajuste(p)).collect();
+                if let Some(c) = Path::polyline(&tela, false) {
+                    r.stroke_path(&c, &tracejado(1.4, &[6.0, 4.0]), COR_AZUL_ACENTO());
+                }
             }
-        });
-        vec![frame.into_geometry()]
+        }
+        // Borracha: círculo do alcance sob o cursor.
+        if self.ferramenta.is_some_and(Ferramenta::apaga) {
+            if let Some(c) = cursor.filter(|p| recorte.contains(*p)).and_then(|p| Path::circle(p, RAIO_BORRACHA_TELA)) {
+                r.stroke_path(&c, &Stroke::new(1.2), COR_TEXTO_MUTED());
+            }
+        }
+        r.pop_clip();
     }
 
-    fn mouse_interaction(&self, estado: &EstadoCamada, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {
+    fn mouse_interaction(&self, estado: &EstadoCamada, bounds: Rect, cursor: Option<Point>) -> CursorIcon {
         match self.ferramenta {
-            Some(_) if estado.gesto.is_some() || self.gesto_externo.is_some() => mouse::Interaction::Crosshair,
-            Some(_) if cursor.position_in(bounds).is_some_and(|p| self.area_em(bounds).contains(p)) => mouse::Interaction::Crosshair,
-            _ => mouse::Interaction::default(),
+            Some(_) if estado.gesto.is_some() || self.gesto_externo.is_some() => CursorIcon::Crosshair,
+            Some(_) if cursor.is_some_and(|p| self.area_na_janela(bounds).contains(p)) => CursorIcon::Crosshair,
+            _ => CursorIcon::Default,
         }
     }
 }
 
-/// Contorno tracejado na cor de destaque (seleção e laço).
-fn tracejado(largura: f32, segmentos: &'static [f32]) -> Stroke<'static> {
-    Stroke {
-        line_dash: LineDash { segments: segmentos, offset: 0 },
-        ..Stroke::default().with_color(COR_AZUL_ACENTO()).with_width(largura)
-    }
+/// Contorno tracejado (seleção e laço; a cor de destaque vai no desenho).
+fn tracejado(largura: f32, segmentos: &[f32]) -> Stroke {
+    Stroke::new(largura).dash(segmentos.to_vec())
 }
 
-fn caixa_de(pontos: impl Iterator<Item = Point>) -> Option<Rectangle> {
+fn caixa_de(pontos: impl Iterator<Item = Point>) -> Option<Rect> {
     let mut caixa: Option<(f32, f32, f32, f32)> = None;
     for p in pontos {
         let c = caixa.get_or_insert((p.x, p.y, p.x, p.y));
@@ -964,17 +946,19 @@ fn caixa_de(pontos: impl Iterator<Item = Point>) -> Option<Rectangle> {
         c.2 = c.2.max(p.x);
         c.3 = c.3.max(p.y);
     }
-    caixa.map(|(x0, y0, x1, y1)| Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)))
+    caixa.map(|(x0, y0, x1, y1)| Rect::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)))
 }
 
 /// Desenha a linha central: curva pelos pontos médios (igual ao motor) ou
 /// segmentos retos. Um ponto só vira um disco.
-fn desenhar_traco(f: &mut Frame, pontos: &[Point], ajuste: impl Fn(Point) -> Point, cor: Color, largura: f32, reto: bool, marca: bool) {
+fn desenhar_traco(r: &mut Renderer, pontos: &[Point], ajuste: impl Fn(Point) -> Point, cor: Color, largura: f32, reto: bool, marca: bool) {
     let pts: Vec<Point> = pontos.iter().map(|&p| ajuste(p)).collect();
     let Some(&p0) = pts.first() else { return };
     let largura = largura.max(0.5);
     if pts.len() == 1 {
-        f.fill(&Path::circle(p0, largura / 2.0), cor);
+        if let Some(c) = Path::circle(p0, largura / 2.0) {
+            r.fill_path(&c, cor, FillRule::NonZero);
+        }
         return;
     }
     let caminho = Path::new(|b| {
@@ -986,24 +970,20 @@ fn desenhar_traco(f: &mut Frame, pontos: &[Point], ajuste: impl Fn(Point) -> Poi
         } else {
             for i in 1..pts.len() - 1 {
                 let fim = Point::new((pts[i].x + pts[i + 1].x) / 2.0, (pts[i].y + pts[i + 1].y) / 2.0);
-                b.quadratic_curve_to(pts[i], fim);
+                b.quadratic_to(pts[i], fim);
             }
             b.line_to(pts[pts.len() - 1]);
         }
     });
-    f.stroke(
-        &caminho,
-        Stroke::default()
-            .with_color(cor)
-            .with_width(largura)
-            .with_line_cap(if marca { LineCap::Square } else { LineCap::Round })
-            .with_line_join(LineJoin::Round),
-    );
+    if let Some(c) = caminho {
+        let ponta = if marca { LineCap::Square } else { LineCap::Round };
+        r.stroke_path(&c, &Stroke::new(largura).cap(ponta).join(LineJoin::Round), cor);
+    }
 }
 
 /// Contorno de largura variável (polígonos do motor), preenchido com a
 /// regra não-zero (os pedaços se somam).
-fn desenhar_contorno(f: &mut Frame, poligonos: &[Vec<Point>], ajuste: impl Fn(Point) -> Point, cor: Color) {
+fn desenhar_contorno(r: &mut Renderer, poligonos: &[Vec<Point>], ajuste: impl Fn(Point) -> Point, cor: Color) {
     let caminho = Path::new(|b| {
         for pol in poligonos.iter().filter(|p| p.len() >= 3) {
             b.move_to(ajuste(pol[0]));
@@ -1013,29 +993,30 @@ fn desenhar_contorno(f: &mut Frame, poligonos: &[Vec<Point>], ajuste: impl Fn(Po
             b.close();
         }
     });
-    f.fill(&caminho, cor);
+    if let Some(c) = caminho {
+        r.fill_path(&c, cor, FillRule::NonZero);
+    }
 }
 
 /// Prévia ao vivo com largura variável: um trecho reto por par de pontos,
 /// pontas redondas, largura média dos dois pontos.
-fn desenhar_previa_variavel(f: &mut Frame, pontos: &[Point], fatores: &[f32], ajuste: impl Fn(Point) -> Point, cor: Color, largura: f32) {
+fn desenhar_previa_variavel(r: &mut Renderer, pontos: &[Point], fatores: &[f32], ajuste: impl Fn(Point) -> Point, cor: Color, largura: f32) {
     let pts: Vec<Point> = pontos.iter().map(|&p| ajuste(p)).collect();
     if pts.len() == 1 {
-        f.fill(&Path::circle(pts[0], (largura * fatores[0] / 2.0).max(0.25)), cor);
+        if let Some(c) = Path::circle(pts[0], (largura * fatores[0] / 2.0).max(0.25)) {
+            r.fill_path(&c, cor, FillRule::NonZero);
+        }
         return;
     }
     for (i, s) in pts.windows(2).enumerate() {
         let l = largura * (fatores[i] + fatores[i + 1]) / 2.0;
-        f.stroke(
-            &Path::line(s[0], s[1]),
-            Stroke::default().with_color(cor).with_width(l.max(0.5)).with_line_cap(LineCap::Round),
-        );
+        r.stroke_path(&Path::line(s[0], s[1]), &Stroke::new(l.max(0.5)).cap(LineCap::Round), cor);
     }
 }
 
 /// Widget pronto: a camada ocupando todo o espaço (para pôr num `stack`).
 pub fn camada<'a, M: 'a>(c: Camada<M>) -> Element<'a, M> {
-    canvas::Canvas::new(c).width(Length::Fill).height(Length::Fill).into()
+    program(c).into()
 }
 
 #[cfg(test)]
@@ -1047,16 +1028,84 @@ mod testes {
         Tinta(EventoCamada),
     }
 
-    fn bounds() -> Rectangle {
-        Rectangle::new(Point::new(100.0, 50.0), Size::new(800.0, 600.0))
+    fn bounds() -> Rect {
+        Rect::new(Point::new(100.0, 50.0), Size::new(800.0, 600.0))
     }
 
-    fn mouse(e: mouse::Event) -> canvas::Event {
-        canvas::Event::Mouse(e)
+    fn em(x: f32, y: f32) -> Option<Point> {
+        Some(Point::new(x, y))
     }
 
-    fn em(x: f32, y: f32) -> mouse::Cursor {
-        mouse::Cursor::Available(Point::new(x, y))
+    /// Como na vitrine: clique_caneta > rolagem > (espaço, pilha[fundo, camada]).
+    fn quadro_rolado(fonte: &FontePressao) -> Element<'static, Msg> {
+        let mut camada = Camada::nova(Vec::new(), Transformacao::default(), Msg::Tinta);
+        camada.ferramenta = Some(Ferramenta::Caneta(0));
+        camada.pena = Some((Color::BLACK, 2.0));
+        camada.fonte_pressao = Some(fonte.clone());
+        let quadro = stack![container(text("desenhe aqui")).width(Length::FILL).height(Length::FILL), self::camada(camada)].height(220.0);
+        let conteudo = pelicano::scrollable(pelicano::column![Space::new(10.0, 400.0), quadro]).height(400.0);
+        crate::clique_caneta::clique_caneta(conteudo, Some(fonte)).into()
+    }
+
+    /// Rola 200 px, desenha (a camada anuncia a zona) e passa `eventos`.
+    fn rodar_quadro(fonte: &FontePressao, eventos: &[(Event, Point)]) -> Vec<Msg> {
+        use pelicano::widget::{dispatch, draw, layout, EventCx, MemoryClipboard};
+        let raiz = quadro_rolado(fonte);
+        let (tela, tema) = (Size::new(600.0, 400.0), Theme::dark());
+        let (mut r, mut st, mut area) = (Renderer::new(), pelicano::States::default(), MemoryClipboard::default());
+        r.begin(tela, 1.0, Color::TRANSPARENT);
+        let mut msgs = Vec::new();
+        let mut passar = |st: &mut pelicano::States, r: &mut Renderer, ev: &Event, p: Point, msgs: &mut Vec<Msg>| {
+            let n = layout(&raiz, tela, r, st, &tema);
+            let mut cx = EventCx { renderer: r, states: st, cursor: Some(p), messages: msgs, window: &mut Vec::new(), redraw: false, clipboard: &mut area };
+            dispatch(&raiz, &n, ev, &mut cx);
+            draw(&raiz, &n, r, st, &tema, Some(p), false);
+        };
+        passar(&mut st, &mut r, &Event::Wheel { dx: 0.0, dy: -200.0, modifiers: Default::default() }, Point::new(50.0, 50.0), &mut msgs);
+        for (ev, p) in eventos {
+            passar(&mut st, &mut r, ev, *p, &mut msgs);
+        }
+        msgs
+    }
+
+    #[test]
+    fn mouse_risca_no_quadro_rolado() {
+        let fonte = FontePressao::nova();
+        fonte.definir_janela_x11(0x40_0001);
+        let msgs = rodar_quadro(&fonte, &[
+            (Event::MousePressed(MouseButton::Left), Point::new(50.0, 250.0)),
+            (Event::CursorMoved(Point::new(90.0, 270.0)), Point::new(90.0, 270.0)),
+            (Event::MouseReleased(MouseButton::Left), Point::new(90.0, 270.0)),
+        ]);
+        let [Msg::Tinta(EventoCamada::TracoTerminado { pontos, .. })] = msgs.as_slice() else { panic!("traço: {msgs:?}") };
+        // O quadro começa em y = 400 − 200 de rolagem.
+        assert_eq!((pontos[0].x, pontos[0].y, pontos[1].y), (50.0, 50.0, 70.0));
+        // A zona da caneta acompanha a rolagem.
+        let z = fonte.zona_tinta().expect("zona");
+        assert_eq!((z.origem, z.area.height), (Point::new(0.0, 200.0), 220.0));
+    }
+
+    #[test]
+    fn toques_da_caneta_viram_traco_pelo_app() {
+        use crate::caneta::{FaseToque, ToqueCaneta};
+        let fonte = FontePressao::nova();
+        fonte.definir_janela_x11(0x40_0001);
+        // Só desenha: a camada anuncia a zona já rolada.
+        rodar_quadro(&fonte, &[(Event::CursorMoved(Point::new(5.0, 5.0)), Point::new(5.0, 5.0))]);
+        let z = fonte.zona_tinta().expect("zona");
+        let t0 = Instant::now();
+        let toque = |fase, x: f32, y: f32| ToqueCaneta { fase, posicao: Point::new(x, y), pressao: Some(0.5), instante: t0, na_tinta: z.area.contains(Point::new(x, y)), borracha: false };
+        let mut gesto = None;
+        let mut saida = Vec::new();
+        for t in [toque(FaseToque::Encostou, 50.0, 250.0), toque(FaseToque::Moveu, 90.0, 270.0), toque(FaseToque::Levantou, 90.0, 270.0)] {
+            saida.extend(GestoTinta::conduzir(&mut gesto, &t, Ferramenta::Caneta(0), z.origem, Transformacao::default(), Some(&fonte)));
+        }
+        let [EventoCamada::TracoTerminado { pontos, .. }] = saida.as_slice() else { panic!("traço: {saida:?}") };
+        assert_eq!((pontos[0].x, pontos[0].y, pontos[1].x, pontos[1].y), (50.0, 50.0, 90.0, 70.0));
+        assert!(gesto.is_none());
+        // Encostar fora da tinta (é clique) não começa traço.
+        let fora = toque(FaseToque::Encostou, 50.0, 20.0);
+        assert!(GestoTinta::conduzir(&mut gesto, &fora, Ferramenta::Caneta(0), z.origem, Transformacao::default(), None).is_none() && gesto.is_none());
     }
 
     #[test]
@@ -1067,20 +1116,20 @@ mod testes {
         camada.margens = Padding { top: 30.0, right: 13.0, bottom: 13.0, left: 90.0 };
         let mut estado = EstadoCamada::default();
         // Fora da área útil (cabeçalho): deixa passar.
-        let (s, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(120.0, 60.0));
-        assert_eq!((s, m), (event::Status::Ignored, None));
+        let (s, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(120.0, 60.0));
+        assert_eq!((s, m), (Captured::No, None));
         // Na barra de rolagem de baixo também.
-        let (s, _) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(300.0, 645.0));
-        assert_eq!(s, event::Status::Ignored);
+        let (s, _) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(300.0, 645.0));
+        assert_eq!(s, Captured::No);
         // Dentro: captura sem mensagem até soltar.
-        let (s, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(210.0, 120.0));
-        assert_eq!(s, event::Status::Captured);
+        let (s, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(210.0, 120.0));
+        assert_eq!(s, Captured::Yes);
         assert!(m.is_none() && estado.em_gesto());
         for (x, y) in [(230.0, 140.0), (230.2, 140.1), (250.0, 160.0)] {
-            let (s, m) = camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(x, y) }), bounds(), em(x, y));
-            assert_eq!((s, m), (event::Status::Captured, None));
+            let (s, m) = camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(x, y)), bounds(), em(x, y));
+            assert_eq!((s, m), (Captured::Yes, None));
         }
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(250.0, 160.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(250.0, 160.0));
         match m {
             Some(Msg::Tinta(EventoCamada::TracoTerminado { ferramenta, pontos })) => {
                 assert_eq!(ferramenta, Ferramenta::Caneta(0));
@@ -1095,19 +1144,44 @@ mod testes {
     }
 
     #[test]
+    fn dedo_risca_como_o_mouse_e_e_capturado() {
+        let mut camada = Camada::nova(Vec::new(), Transformacao { escala: 2.0, dx: 10.0, dy: 20.0 }, Msg::Tinta);
+        camada.ferramenta = Some(Ferramenta::Caneta(0));
+        let mut estado = EstadoCamada::default();
+        // Fora da camada: deixa passar (vira mouse para o resto da tela).
+        let fora = Event::FingerPressed { id: 1, position: Point::new(50.0, 20.0) };
+        assert_eq!(camada.atualizar(&mut estado, &fora, bounds(), None), (Captured::No, None));
+        // Sem mouse na janela (`cursor` = None): o dedo traz a posição.
+        let (s, m) = camada.atualizar(&mut estado, &Event::FingerPressed { id: 1, position: Point::new(210.0, 120.0) }, bounds(), None);
+        assert!(s == Captured::Yes && m.is_none() && estado.em_gesto());
+        let (s, _) = camada.atualizar(&mut estado, &Event::FingerMoved { id: 1, position: Point::new(250.0, 160.0) }, bounds(), None);
+        assert_eq!(s, Captured::Yes);
+        let (s, m) = camada.atualizar(&mut estado, &Event::FingerLifted { id: 1, position: Point::new(250.0, 160.0) }, bounds(), None);
+        assert_eq!(s, Captured::Yes);
+        match m {
+            Some(Msg::Tinta(EventoCamada::TracoTerminado { pontos, .. })) => {
+                assert_eq!((pontos[0].x, pontos[0].y), (50.0, 25.0));
+                assert_eq!((pontos[1].x, pontos[1].y), (70.0, 45.0));
+            }
+            outro => panic!("esperava TracoTerminado, veio {outro:?}"),
+        }
+        assert!(!estado.em_gesto());
+    }
+
+    #[test]
     fn borracha_emite_apagar_ao_vivo_e_fim_ao_soltar() {
         let mut camada = Camada::nova(Vec::new(), Transformacao { escala: 2.0, dx: 0.0, dy: 0.0 }, Msg::Tinta);
         camada.ferramenta = Some(Ferramenta::BorrachaPonto);
         let mut estado = EstadoCamada::default();
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(140.0, 90.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(140.0, 90.0));
         assert_eq!(m, Some(Msg::Tinta(EventoCamada::Apagar {
             ferramenta: Ferramenta::BorrachaPonto,
             ponto: Point::new(20.0, 20.0),
             raio: RAIO_BORRACHA_TELA / 2.0,
         })));
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(160.0, 90.0) }), bounds(), em(160.0, 90.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(160.0, 90.0)), bounds(), em(160.0, 90.0));
         assert!(matches!(m, Some(Msg::Tinta(EventoCamada::Apagar { ponto, .. })) if ponto == Point::new(30.0, 20.0)));
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(160.0, 90.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(160.0, 90.0));
         assert_eq!(m, Some(Msg::Tinta(EventoCamada::ApagarFim)));
     }
 
@@ -1116,23 +1190,23 @@ mod testes {
         let mut camada = Camada::nova(Vec::new(), Transformacao::default(), Msg::Tinta);
         camada.ferramenta = Some(Ferramenta::Laco);
         let mut estado = EstadoCamada::default();
-        camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(110.0, 60.0));
+        camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(110.0, 60.0));
         for (x, y) in [(200.0, 60.0), (200.0, 150.0), (110.0, 150.0)] {
-            camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(x, y) }), bounds(), em(x, y));
+            camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(x, y)), bounds(), em(x, y));
         }
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(110.0, 150.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(110.0, 150.0));
         assert_eq!(m, Some(Msg::Tinta(EventoCamada::Laco(vec![
             Point::new(10.0, 10.0), Point::new(100.0, 10.0), Point::new(100.0, 100.0), Point::new(10.0, 100.0),
         ]))));
         // Sem ferramenta (modo normal): o clique vai para a grade de baixo.
         camada.ferramenta = None;
-        let (s, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(300.0, 300.0));
-        assert_eq!((s, m), (event::Status::Ignored, None));
-        assert_eq!(camada.mouse_interaction(&estado, bounds(), em(300.0, 300.0)), mouse::Interaction::default());
+        let (s, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(300.0, 300.0));
+        assert_eq!((s, m), (Captured::No, None));
+        assert_eq!(camada.mouse_interaction(&estado, bounds(), em(300.0, 300.0)), CursorIcon::Default);
         // A roda nunca é capturada (a planilha continua rolando no modo desenho).
         camada.ferramenta = Some(Ferramenta::Caneta(1));
-        let roda = mouse(mouse::Event::WheelScrolled { delta: mouse::ScrollDelta::Lines { x: 0.0, y: -1.0 } });
-        assert_eq!(camada.update(&mut estado, roda, bounds(), em(300.0, 300.0)).0, event::Status::Ignored);
+        let roda = Event::Wheel { dx: 0.0, dy: -1.0, modifiers: pelicano::Modifiers::empty() };
+        assert_eq!(camada.atualizar(&mut estado, &roda, bounds(), em(300.0, 300.0)).0, Captured::No);
     }
 
     #[test]
@@ -1189,18 +1263,18 @@ mod testes {
         let mut camada = Camada::nova(Vec::new(), Transformacao::default(), Msg::Tinta);
         camada.ferramenta = Some(Ferramenta::Caneta(0));
         let mut estado = EstadoCamada::default();
-        let toque = mouse::Button::Other(0x14a);
-        let (s, _) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(toque)), bounds(), em(150.0, 100.0));
-        assert_eq!(s, event::Status::Captured);
-        camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(180.0, 120.0) }), bounds(), em(180.0, 120.0));
+        let toque = MouseButton::Other(0x14a);
+        let (s, _) = camada.atualizar(&mut estado, &Event::MousePressed(toque), bounds(), em(150.0, 100.0));
+        assert_eq!(s, Captured::Yes);
+        camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(180.0, 120.0)), bounds(), em(180.0, 120.0));
         // Soltar outro botão não encerra; soltar o mesmo, sim.
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(180.0, 120.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(180.0, 120.0));
         assert!(m.is_none() && estado.em_gesto());
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(toque)), bounds(), em(180.0, 120.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(toque), bounds(), em(180.0, 120.0));
         assert!(matches!(m, Some(Msg::Tinta(EventoCamada::TracoTerminado { ref pontos, .. })) if pontos.len() == 2));
         // Botão direito nunca começa traço.
-        let (s, _) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Right)), bounds(), em(150.0, 100.0));
-        assert_eq!(s, event::Status::Ignored);
+        let (s, _) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Right), bounds(), em(150.0, 100.0));
+        assert_eq!(s, Captured::No);
     }
 
     #[test]
@@ -1211,17 +1285,17 @@ mod testes {
         camada.fonte_pressao = Some(fonte.clone());
         let mut estado = EstadoCamada::default();
         // Mouse: nenhuma amostra recente da mesa.
-        camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
-        camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(160.0, 100.0) }), bounds(), em(160.0, 100.0));
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(160.0, 100.0));
+        camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
+        camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(160.0, 100.0)), bounds(), em(160.0, 100.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(160.0, 100.0));
         let Some(Msg::Tinta(EventoCamada::TracoTerminado { pontos, .. })) = m else { panic!("traço") };
         assert!(pontos.iter().all(|p| p.pressao.is_none()));
-        // Caneta: a amostra chega junto (ou logo depois) do evento do Iced.
+        // Caneta: a amostra chega junto (ou logo depois) do evento da janela.
         fonte.registrar(Instant::now(), 0.3);
-        camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
-        camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(170.0, 100.0) }), bounds(), em(170.0, 100.0));
+        camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
+        camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(170.0, 100.0)), bounds(), em(170.0, 100.0));
         fonte.registrar(Instant::now(), 0.8);
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(170.0, 100.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(170.0, 100.0));
         let Some(Msg::Tinta(EventoCamada::TracoTerminado { pontos, .. })) = m else { panic!("traço") };
         assert!(pontos.iter().all(|p| p.pressao.is_some()), "{pontos:?}");
         assert_eq!(pontos.last().unwrap().pressao, Some(0.8), "casado de novo ao soltar");
@@ -1270,46 +1344,46 @@ mod testes {
     }
 
     #[test]
-    fn clique_do_iced_da_caneta_fica_com_a_leitura_x11_e_mouse_continua_riscando() {
+    fn clique_da_janela_da_caneta_fica_com_a_leitura_x11_e_mouse_continua_riscando() {
         use crate::caneta::FaseToque;
         let fonte = FontePressao::nova();
         let mut camada = Camada::nova(Vec::new(), Transformacao::default(), Msg::Tinta);
         camada.ferramenta = Some(Ferramenta::Caneta(0));
         camada.fonte_pressao = Some(fonte.clone());
         let mut estado = EstadoCamada::default();
-        // Sem janela X conhecida, a leitura por fora não conduz nada: o Iced risca.
+        // Sem janela X conhecida, a leitura por fora não conduz nada: o mouse risca.
         fonte.enviar_toque(toque(FaseToque::Encostou, 150.0, 100.0, Instant::now()));
-        let (s, _) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
-        assert_eq!(s, event::Status::Captured);
+        let (s, _) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
+        assert_eq!(s, Captured::Yes);
         assert!(estado.em_gesto());
         estado = EstadoCamada::default();
         fonte.enviar_toque(toque(FaseToque::Levantou, 150.0, 100.0, Instant::now()));
-        // Com a janela X: a ponta encostada não começa gesto no Iced, mas o
+        // Com a janela X: a ponta encostada não começa gesto do mouse, mas o
         // clique não passa para a grade (Captured).
         fonte.definir_janela_x11(0x40_0001);
         fonte.enviar_toque(toque(FaseToque::Encostou, 150.0, 100.0, Instant::now()));
-        let (s, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
-        assert_eq!((s, m), (event::Status::Captured, None));
+        let (s, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
+        assert_eq!((s, m), (Captured::Yes, None));
         assert!(!estado.em_gesto());
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(150.0, 100.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(150.0, 100.0));
         assert_eq!(m, None, "nenhum traço duplicado");
         fonte.enviar_toque(toque(FaseToque::Levantou, 150.0, 100.0, Instant::now()));
         assert_eq!(fonte.recolher_toques().len(), 4);
-        // Corrida: o clique do Iced chegou ANTES do encostar lido por fora.
-        // O gesto do Iced é descartado ao soltar (a caneta encostou durante ele).
+        // Corrida: o clique da janela chegou ANTES do encostar lido por fora.
+        // O gesto do mouse é descartado ao soltar (a caneta encostou durante ele).
         std::thread::sleep(std::time::Duration::from_millis(320));
-        camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
+        camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
         assert!(estado.em_gesto(), "mouse comum: risca");
         fonte.enviar_toque(toque(FaseToque::Encostou, 150.0, 100.0, Instant::now()));
-        camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(180.0, 100.0) }), bounds(), em(180.0, 100.0));
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(180.0, 100.0));
+        camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(180.0, 100.0)), bounds(), em(180.0, 100.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(180.0, 100.0));
         assert_eq!(m, None, "o traço é o da leitura X11");
         fonte.enviar_toque(toque(FaseToque::Levantou, 180.0, 100.0, Instant::now()));
         // Mouse longe de qualquer toque da caneta: risca normalmente.
         std::thread::sleep(std::time::Duration::from_millis(320));
-        camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(150.0, 100.0));
-        camada.update(&mut estado, mouse(mouse::Event::CursorMoved { position: Point::new(190.0, 100.0) }), bounds(), em(190.0, 100.0));
-        let (_, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonReleased(mouse::Button::Left)), bounds(), em(190.0, 100.0));
+        camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(150.0, 100.0));
+        camada.atualizar(&mut estado, &Event::CursorMoved(Point::new(190.0, 100.0)), bounds(), em(190.0, 100.0));
+        let (_, m) = camada.atualizar(&mut estado, &Event::MouseReleased(MouseButton::Left), bounds(), em(190.0, 100.0));
         assert!(matches!(m, Some(Msg::Tinta(EventoCamada::TracoTerminado { .. }))));
     }
 
@@ -1333,8 +1407,8 @@ mod testes {
         camada.ferramenta = Some(Ferramenta::Caneta(0));
         camada.mouse_sai_do_modo = true;
         let mut estado = EstadoCamada::default();
-        let (s, m) = camada.update(&mut estado, mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), bounds(), em(300.0, 300.0));
-        assert_eq!((s, m), (event::Status::Ignored, None));
+        let (s, m) = camada.atualizar(&mut estado, &Event::MousePressed(MouseButton::Left), bounds(), em(300.0, 300.0));
+        assert_eq!((s, m), (Captured::No, None));
         assert!(!estado.em_gesto());
     }
 }

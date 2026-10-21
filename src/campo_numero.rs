@@ -2,8 +2,7 @@
 //! do Excel/Word: seta para cima soma um passo, para baixo tira; rolar a
 //! roda com o mouse em cima do campo faz o mesmo. O texto continua editável
 //! e é sempre o que a aplicação recebe (vírgula decimal, pt-BR).
-use iced::widget::{button, column, container, mouse_area, row, text_input};
-use iced::{mouse, Alignment, Element, Length};
+use pelicano::{button, column, container, input_default, mouse_area, row, text_input, Align, Element, Length, Status};
 
 use crate::tema::{estilo_botao_pequeno, COR_BORDA};
 
@@ -61,37 +60,31 @@ pub fn campo_numero<'a, M: Clone + 'static>(
     let mais = ao_mudar(passar(texto, 1.0, passo, min, max));
     let menos = ao_mudar(passar(texto, -1.0, passo, min, max));
     let seta = |nome: &'static str, msg: M| {
-        button(container(crate::icones::icone(nome, 10.0)).center(Length::Fill))
+        button(container(crate::icones::icone(nome, 10.0)).center())
             .padding(0)
-            .width(Length::Fixed(16.0))
-            .height(Length::Fixed(11.0))
+            .width(16)
+            .height(11)
             .style(estilo_botao_pequeno(false))
             .on_press(msg)
     };
     let setas = column![seta("chevron-up", mais.clone()), seta("chevron-down", menos.clone())].spacing(1);
-    let entrada = text_input(dica, texto)
+    let entrada = text_input(dica.to_owned(), texto.to_owned())
         .on_input(ao_mudar)
         .size(12)
         .padding([4, 6])
-        .width(Length::Fill)
-        .style(move |t: &iced::Theme, s| {
-            let mut st = iced::widget::text_input::default(t, s);
+        .width(Length::FILL)
+        .style(move |t, s| {
+            let mut st = input_default(t, s);
             if invalido {
                 st.border.color = crate::tema::COR_ERRO();
-            } else if matches!(s, iced::widget::text_input::Status::Active) {
+            } else if s == Status::Idle {
                 st.border.color = COR_BORDA();
             }
             st
         });
-    let corpo = row![entrada, setas].spacing(2).align_y(Alignment::Center).width(Length::Fixed(largura));
+    let corpo = row![entrada, setas].spacing(2).align(Align::Center).width(largura);
     mouse_area(corpo)
-        .on_scroll(move |d| {
-            let y = match d {
-                mouse::ScrollDelta::Lines { y, .. } => y,
-                mouse::ScrollDelta::Pixels { y, .. } => y,
-            };
-            if y >= 0.0 { mais.clone() } else { menos.clone() }
-        })
+        .on_scroll(move |_, dy, _| if dy >= 0.0 { mais.clone() } else { menos.clone() })
         .into()
 }
 

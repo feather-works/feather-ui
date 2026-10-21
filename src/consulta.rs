@@ -4,9 +4,10 @@
 //! passos" e o "O que há de novo" montam a tela com elas, para as três
 //! ficarem iguais. Cores só pelos tokens do tema (GUIA-JANELAS.md).
 use crate::{icones, tema};
-use iced::widget::button::Status;
-use iced::widget::{button, column, container, row, scrollable, svg, text, Space};
-use iced::{Alignment, Background, Border, Element, Font, Length, Theme};
+use pelicano::{
+    button, column, container, horizontal_rule, horizontal_space, row, scrollable, text, Align, Border, Element, Font,
+    Length, Padding, Space, Status, Style, Theme,
+};
 
 /// Altura única dos cartões: todos iguais, a grade não fica desalinhada.
 pub const ALTURA_CARTAO: f32 = 118.;
@@ -15,54 +16,36 @@ pub const LARGURA_LATERAL: f32 = 255.;
 
 /// Texto semibold (títulos dos quatro degraus da hierarquia).
 pub fn negrito<'a, M: 'static>(conteudo: impl Into<String>, tamanho: f32) -> Element<'a, M> {
-    text(conteudo.into()).size(tamanho).font(Font {
-        weight: iced::font::Weight::Semibold, ..Font::DEFAULT
-    }).into()
+    text(conteudo.into()).size(tamanho).font(Font::SEMIBOLD).into()
 }
 
 /// Texto de apoio, apagado.
 pub fn apagado<'a, M: 'static>(conteudo: impl Into<String>, tamanho: f32) -> Element<'a, M> {
-    text(conteudo.into()).size(tamanho).line_height(1.4)
-        .color(tema::COR_TEXTO_MUTED()).into()
+    text(conteudo.into()).size(tamanho).color(tema::COR_TEXTO_MUTED()).line_height(1.4).into()
 }
 
 /// Cartão e botões claros da F1: painel com borda; ao passar o mouse, pastel.
-pub fn estilo_cartao(_: &Theme, status: Status) -> button::Style {
-    button::Style {
-        background: Some(Background::Color(
-            if matches!(status, Status::Hovered | Status::Pressed) {
-                tema::COR_AZUL_FUNDO()
-            } else {
-                tema::COR_PAINEL()
-            }
-        )),
-        text_color: tema::COR_TEXTO(),
-        border: Border { color: tema::COR_BORDA(), width: 1., radius: 11.0.into() },
-        ..Default::default()
-    }
+pub fn estilo_cartao(_: &Theme, status: Status) -> Style {
+    let fundo = if matches!(status, Status::Hovered | Status::Pressed) { tema::COR_AZUL_FUNDO() } else { tema::COR_PAINEL() };
+    Style::default().background(fundo).text_color(tema::COR_TEXTO()).border(Border::rounded(11.0).color(tema::COR_BORDA(), 1.))
 }
 
 /// Item da lateral: ativo em pastel, mouse por cima em `COR_HOVER`.
-pub fn estilo_nav(_: &Theme, status: Status, ativo: bool) -> button::Style {
-    let fundo = if ativo {
-        Some(Background::Color(tema::COR_AZUL_FUNDO()))
+pub fn estilo_nav(_: &Theme, status: Status, ativo: bool) -> Style {
+    let s = Style::default().text_color(tema::COR_TEXTO()).border(Border::rounded(9.0));
+    if ativo {
+        s.background(tema::COR_AZUL_FUNDO())
     } else if matches!(status, Status::Hovered | Status::Pressed) {
-        Some(Background::Color(tema::COR_HOVER()))
+        s.background(tema::COR_HOVER())
     } else {
-        None
-    };
-    button::Style {
-        background: fundo,
-        text_color: tema::COR_TEXTO(),
-        border: Border { radius: 9.0.into(), ..Default::default() },
-        ..Default::default()
+        s
     }
 }
 
 /// Rótulo de grupo da lateral, em caixa alta (`BÁSICO`, `VERSÕES`…).
 pub fn rotulo_grupo<'a, M: 'static>(rotulo: &str) -> Element<'a, M> {
     container(text(rotulo.to_uppercase()).size(10.5).color(tema::COR_TEXTO_MUTED()))
-        .padding(iced::Padding { left: 15., right: 5., top: 13., bottom: 4. }).into()
+        .padding(Padding { left: 15., right: 5., top: 13., bottom: 4. }).into()
 }
 
 /// Item da lateral: ícone 18 + texto 12,5. Sem destino fica desabilitado.
@@ -71,11 +54,16 @@ pub fn item_nav<'a, M: Clone + 'static>(
 ) -> Element<'a, M> {
     let conteudo = row![
         icones::icone_traco(icone, 18.),
-        text(rotulo.into()).size(12.5).width(Length::Fill),
-    ].spacing(12).align_y(Alignment::Center);
-    button(conteudo).width(Length::Fill)
-        .padding([10, 13]).style(move |t, s| estilo_nav(t, s, ativo))
+        text(rotulo.into()).size(12.5).width(Length::FILL),
+    ].spacing(12).align(Align::Center);
+    button(conteudo).width(Length::FILL)
+        .padding([10u16, 13]).style(move |t, s| estilo_nav(t, s, ativo))
         .on_press_maybe(destino).into()
+}
+
+/// Fundo da lateral (`COR_PAINEL_FAIXA` com borda suave).
+pub fn estilo_lateral(_: &Theme) -> Style {
+    Style::default().background(tema::COR_PAINEL_FAIXA()).border(Border::default().color(tema::COR_BORDA_SUAVE(), 1.))
 }
 
 /// A lateral inteira (255 px, rolável) com um rodapé opcional fixo embaixo.
@@ -83,30 +71,22 @@ pub fn lateral<'a, M: 'static>(
     itens: impl Into<Element<'a, M>>, rodape: Option<Element<'a, M>>,
 ) -> Element<'a, M> {
     let mut corpo = column![
-        scrollable(container(itens).padding([14, 12]).width(Length::Fill))
-            .height(Length::Fill),
+        scrollable(container(itens).padding([14u16, 12]).width(Length::FILL)),
     ];
     if let Some(r) = rodape {
-        corpo = corpo.push(container(r).padding([12, 14]).width(Length::Fill));
+        corpo = corpo.push(container(r).padding([12u16, 14]).width(Length::FILL));
     }
-    container(corpo.height(Length::Fill))
-        .width(Length::Fixed(LARGURA_LATERAL))
-        .height(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(Background::Color(tema::COR_PAINEL_FAIXA())),
-            border: Border { color: tema::COR_BORDA_SUAVE(), width: 1., ..Default::default() },
-            ..Default::default()
-        }).into()
+    container(corpo.height(Length::FILL))
+        .width(LARGURA_LATERAL)
+        .height(Length::FILL)
+        .style(estilo_lateral).into()
 }
 
 /// Ícone num quadrado pastel (o "selo" dos cartões).
 pub fn icone_pastel<'a, M: 'static>(icone: &str, tamanho: f32) -> Element<'a, M> {
     container(icones::icone_traco(icone, tamanho))
-        .padding(13).style(|_| container::Style {
-            background: Some(Background::Color(tema::COR_AZUL_FUNDO())),
-            border: Border { radius: 12.0.into(), ..Default::default() },
-            ..Default::default()
-        }).into()
+        .padding(13.).style(|_| Style::default().background(tema::COR_AZUL_FUNDO()).border(Border::rounded(12.0)))
+        .into()
 }
 
 /// Corta o resumo de um cartão em ~84 caracteres, com reticências.
@@ -123,27 +103,20 @@ pub fn cartao<'a, M: Clone + 'static>(
 ) -> Element<'a, M> {
     let texto = column![
         negrito(titulo, 13.5),
-        text(descricao.into()).size(11.5)
-            .color(tema::COR_TEXTO_MUTED()).line_height(1.25),
-    ].spacing(5).width(Length::Fill);
-    let mut linha = row![icone_pastel(icone, 25.), texto].spacing(10).align_y(Alignment::Center);
+        text(descricao.into()).size(11.5).color(tema::COR_TEXTO_MUTED()).line_height(1.25),
+    ].spacing(5).width(Length::FILL);
+    let mut linha = row![icone_pastel(icone, 25.), texto].spacing(10).align(Align::Center);
     if destino.is_some() {
         linha = linha.push(icones::icone("chevron-right", 18.));
     }
     match destino {
-        Some(msg) => button(linha).padding(13).style(estilo_cartao)
-            .height(Length::Fixed(ALTURA_CARTAO)).width(Length::FillPortion(1))
+        Some(msg) => button(linha).padding(13.).style(estilo_cartao)
+            .height(ALTURA_CARTAO).width(Length::FILL)
             .on_press(msg).into(),
-        None => container(linha).padding(13)
-            .height(Length::Fixed(ALTURA_CARTAO)).width(Length::FillPortion(1))
-            .align_y(Alignment::Center)
-            .style(|t| {
-                let b = estilo_cartao(t, Status::Active);
-                container::Style {
-                    background: b.background, border: b.border,
-                    text_color: Some(b.text_color), ..Default::default()
-                }
-            }).into(),
+        None => container(linha).padding(13.)
+            .height(ALTURA_CARTAO).width(Length::FILL)
+            .align_y(Align::Center)
+            .style(|t| estilo_cartao(t, Status::Idle)).into(),
     }
 }
 
@@ -165,7 +138,7 @@ pub fn grade<'a, M: 'static>(cartoes: Vec<Element<'a, M>>, colunas: usize) -> El
     }
     if na_linha > 0 {
         for _ in na_linha..colunas {
-            linha = linha.push(Space::with_width(Length::FillPortion(1)));
+            linha = linha.push(Space::new(Length::FILL, 0.0));
         }
         grade = grade.push(linha);
     }
@@ -174,22 +147,13 @@ pub fn grade<'a, M: 'static>(cartoes: Vec<Element<'a, M>>, colunas: usize) -> El
 
 /// Linha fina entre blocos.
 pub fn divisor<'a, M: 'static>() -> Element<'a, M> {
-    container(Space::with_height(Length::Fixed(1.)))
-        .width(Length::Fill).style(|_| container::Style {
-            background: Some(Background::Color(tema::COR_BORDA_SUAVE())),
-            ..Default::default()
-        }).into()
+    horizontal_rule(1.).color(tema::COR_BORDA_SUAVE()).into()
 }
 
 /// A marca do produto em 86 px, numa caixa fixa de 96.
 pub fn marca<'a, M: 'static>() -> Element<'a, M> {
-    container(crate::marca::icone_atual(86.))
-        // Nunca usar center_y(Fill) dentro de scrollable vertical:
-        // center_y define a altura do Container e sobrescreve height(Fixed).
-        // Na F1 isso gerava altura praticamente ilimitada e overflow
-        // ao converter coordenadas de glifos no cosmic-text.
-        .center_x(Length::Fixed(96.))
-        .center_y(Length::Fixed(96.)).into()
+    // Sem `center()`: ele põe Fill, e Fill dentro de rolagem vertical estica a caixa.
+    container(crate::marca::icone_atual(86.)).width(96.).height(96.).align_x(Align::Center).align_y(Align::Center).into()
 }
 
 /// Cabeçalho (hero): marca, título 24 e introdução; ilustração à direita.
@@ -200,10 +164,9 @@ pub fn cabecalho<'a, M: 'static>(
         marca(),
         column![
             negrito(titulo, 24.),
-            text(introducao.into()).size(13).line_height(1.45)
-                .color(tema::COR_TEXTO_MUTED()),
-        ].spacing(12).width(Length::Fill),
-    ].spacing(18).align_y(Alignment::Center);
+            text(introducao.into()).size(13).color(tema::COR_TEXTO_MUTED()).line_height(1.45),
+        ].spacing(12).width(Length::FILL),
+    ].spacing(18).align(Align::Center);
     if let Some(i) = ilustracao { linha = linha.push(i); }
     linha.into()
 }
@@ -305,14 +268,10 @@ fn svg_ilustracao(tipo: Ilustracao) -> String {
 
 /// A ilustração `tipo` no quadro pastel arredondado do cabeçalho.
 pub fn ilustracao<'a, M: 'static>(tipo: Ilustracao) -> Element<'a, M> {
-    container(svg::Svg::new(svg::Handle::from_memory(svg_ilustracao(tipo).into_bytes()))
-        .width(Length::Fixed(164.)).height(Length::Fixed(132.)))
-        .center_x(Length::Fixed(184.))
-        .style(|_| container::Style {
-            background: Some(Background::Color(tema::COR_AZUL_FUNDO())),
-            border: Border { radius: 20.0.into(), ..Default::default() },
-            ..Default::default()
-        }).into()
+    container(pelicano::svg(icones::carregar(svg_ilustracao(tipo))).width(164.).height(132.))
+        .width(184.).align_x(Align::Center)
+        .style(|_| Style::default().background(tema::COR_AZUL_FUNDO()).border(Border::rounded(20.0)))
+        .into()
 }
 
 /// A ilustração da planilha da F1 (moldura, grade, células marcadas e o
@@ -328,15 +287,15 @@ pub fn paginacao<'a, M: Clone + 'static>(
 ) -> Element<'a, M> {
     row![
         button(row![icones::icone("chevron-left", 14.), text(anterior.0.to_owned()).size(12.)]
-            .spacing(4).align_y(Alignment::Center))
-            .padding([8, 13]).style(estilo_cartao)
+            .spacing(4).align(Align::Center))
+            .padding([8u16, 13]).style(estilo_cartao)
             .on_press_maybe(anterior.1),
-        Space::with_width(Length::Fill),
+        horizontal_space(),
         button(row![text(proximo.0.to_owned()).size(12.), icones::icone("chevron-right", 14.)]
-            .spacing(4).align_y(Alignment::Center))
-            .padding([8, 13]).style(tema::estilo_botao_primario)
+            .spacing(4).align(Align::Center))
+            .padding([8u16, 13]).style(tema::estilo_botao_primario)
             .on_press_maybe(proximo.1),
-    ].spacing(10).align_y(Alignment::Center).into()
+    ].spacing(10).align(Align::Center).into()
 }
 
 /// A janela inteira: lateral + área de leitura (`COR_PAINEL`) que rola,
@@ -344,24 +303,18 @@ pub fn paginacao<'a, M: Clone + 'static>(
 pub fn janela<'a, M: 'static>(
     lateral: Element<'a, M>, conteudo: Element<'a, M>, rodape: Option<Element<'a, M>>,
 ) -> Element<'a, M> {
-    // O viewport rola e preenche a janela; seu CONTEÚDO tem altura Shrink
-    // (Iced 0.13 entra em pânico com Fill aqui).
     // Margem direita maior: a barra de rolagem não encosta nos cartões.
     let rolagem = scrollable(container(conteudo)
-        .padding(iced::Padding { top: 18., bottom: 18., left: 8., right: 20. })
-        .width(Length::Fill).height(Length::Shrink))
-        .height(Length::Fill).width(Length::Fill);
-    let mut leitor = column![rolagem].spacing(10)
-        .padding([16, 20]).width(Length::Fill).height(Length::Fill);
-    if let Some(r) = rodape { leitor = leitor.push(r); }
+        .padding(Padding { top: 18., bottom: 18., left: 8., right: 20. })
+        .width(Length::FILL));
+    let leitor = column![rolagem].spacing(10)
+        .padding([16u16, 20]).width(Length::FILL).height(Length::FILL)
+        .push_maybe(rodape);
     row![
         lateral,
-        container(leitor).width(Length::Fill).height(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Background::Color(tema::COR_PAINEL())),
-                ..Default::default()
-            }),
-    ].height(Length::Fill).width(Length::Fill).into()
+        container(leitor).width(Length::FILL).height(Length::FILL)
+            .style(|_| Style::default().background(tema::COR_PAINEL())),
+    ].height(Length::FILL).width(Length::FILL).into()
 }
 
 #[cfg(test)]
@@ -373,12 +326,12 @@ mod testes {
 
     #[test]
     fn pecas_montam_janela_completa_sem_fill_no_conteudo_rolavel() {
-        let nav = iced::widget::column![
+        let nav = pelicano::column![
             rotulo_grupo::<M>("Passos"),
             item_nav("Boas-vindas", "rocket", true, Some(M::Ir)),
             item_nav("Desligado", "user", false, None),
         ];
-        let conteudo = iced::widget::column![
+        let conteudo = pelicano::column![
             cabecalho("Título", "Introdução", Some(ilustracao_planilha())),
             grade(vec![
                 cartao("sparkles", "A", "resumo", Some(M::Ir)),
