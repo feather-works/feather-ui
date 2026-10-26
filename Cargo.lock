@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "feather-ui"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "pelicano",
@@ -2393,8 +2393,8 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pelicano"
-version = "0.1.9"
-source = "git+https://github.com/feather-works/pelicano.git?tag=v0.1.9#d5c361797ff5d9c4e81b47a0a8090348cb550920"
+version = "0.1.10"
+source = "git+https://github.com/feather-works/pelicano.git?tag=v0.1.10#b07dd264eac764cc4e9ae37be840c5ff757d3c2f"
 dependencies = [
  "accesskit",
  "accesskit_winit",
