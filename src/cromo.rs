@@ -18,6 +18,49 @@ pub fn moldura_janela<'a, M: 'a>(conteudo: Element<'a, M>) -> Element<'a, M> {
         .into()
 }
 
+/// Espessura da borda que redimensiona a janela sem moldura do sistema.
+pub const BORDA_REDIMENSIONAR: f32 = 4.0;
+
+/// [`moldura_janela`] para janela sem moldura do sistema (barra própria): uma faixa de
+/// [`BORDA_REDIMENSIONAR`] px em volta, com o cursor de redimensionar, que pede
+/// `ao_redimensionar(direção)` — o app responde com `WindowCmd::DragResize(direção)`.
+/// Sem ela, a janela com barra própria só mudava de tamanho maximizando.
+pub fn moldura_redimensionavel<'a, M: Clone + 'a>(
+    conteudo: Element<'a, M>,
+    ao_redimensionar: impl Fn(pelicano::ResizeDirection) -> M,
+) -> Element<'a, M> {
+    use pelicano::{CursorIcon as C, ResizeDirection as D};
+    let b = BORDA_REDIMENSIONAR;
+    let borda = |w: Length, h: Length, d: D, c: C| -> Element<'a, M> {
+        mouse_area(container(Space::new(w, h)).style(|_| Style::default().background(COR_FUNDO_JANELA())))
+            .on_press(ao_redimensionar(d))
+            .cursor_icon(c)
+            .into()
+    };
+    let fixo = Length::Fixed(b);
+    column![
+        row![
+            borda(fixo, fixo, D::NorthWest, C::NwResize),
+            borda(Length::FILL, fixo, D::North, C::NResize),
+            borda(fixo, fixo, D::NorthEast, C::NeResize),
+        ],
+        row![
+            borda(fixo, Length::FILL, D::West, C::WResize),
+            moldura_janela(conteudo),
+            borda(fixo, Length::FILL, D::East, C::EResize),
+        ]
+        .height(Length::FILL),
+        row![
+            borda(fixo, fixo, D::SouthWest, C::SwResize),
+            borda(Length::FILL, fixo, D::South, C::SResize),
+            borda(fixo, fixo, D::SouthEast, C::SeResize),
+        ],
+    ]
+    .width(Length::FILL)
+    .height(Length::FILL)
+    .into()
+}
+
 /// Os eventos continuam sendo do programa hospedeiro.
 pub struct AcoesJanela<M> {
     pub arrastar: M,
