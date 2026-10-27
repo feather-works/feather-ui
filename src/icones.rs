@@ -21,6 +21,12 @@ fn svg_ribbon(nome: &str) -> Option<&'static str> {
         .chain(ribbon::SISTEMA.iter())
         .find(|(chave, alias, _)| nome == *chave || nome == *alias)
         .map(|(_, _, desenho)| *desenho)
+        // `database`, `file-import`…: só os nomes que nem o Tabler embutido tem, para não
+        // trocar o desenho de ícones que já estão na tela (`settings`, `columns`…).
+        .or_else(|| (!CATALOGO_EMBUTIDO.lines().any(|l| l.split('\t').next() == Some(nome)))
+            .then(|| ribbon::EXTRAS.iter().find(|(chave, alias, _)| nome == *chave || nome == *alias))
+            .flatten()
+            .map(|(_, _, desenho)| *desenho))
 }
 
 /// Resolve as variáveis CSS do pacote: o rasterizador SVG não interpreta var().
