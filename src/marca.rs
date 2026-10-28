@@ -76,30 +76,10 @@ pub fn svg_para(produto:Produto,personalizada:bool)->String {
     PENA_ORIGINAL
         .replace("#287846",cor)
         .replace("#72aa86",&clarear(cor,0.40))
-        .replace("#f4faf5",&clarear(cor,0.95))
-        .replace("#e8f4eb",&clarear(cor,0.88))
-        .replace("#e4f0e7",&clarear(cor,0.85))
 }
-/// Para a tela, garantimos um canvas **opaco** na cor real da
-/// superfície. Os cantos do retângulo arredondado continuam visualmente
-/// transparentes, mas não há pixels com alfa parcial para o backend de SVG
-/// compor contra preto (franja escura nos quatro cantos, especialmente em
-/// escala fracionária). Os arquivos SVG distribuídos permanecem transparentes.
-fn svg_opaco(produto:Produto, personalizada:bool)->String {
-    let svg=svg_para(produto,personalizada);
-    let bg=tema::COR_PAINEL();
-    let canal=|v:f32| -> u8 {(v.clamp(0.,1.)*255.).round() as u8};
-    let cor=format!("#{:02x}{:02x}{:02x}",canal(bg.r),canal(bg.g),canal(bg.b));
-    let fundo=format!(
-        r#"<rect id="fundo-opaco" x="0" y="0" width="128" height="128" fill="{cor}"/>"#
-    );
-    // A inserção fica antes do fundo com cantos arredondados: a geometria
-    // original, o degradê e as duas penas não são modificados.
-    svg.replacen("<rect id=\"fundo-arredondado\"", 
-        &format!("{fundo}\n  <rect id=\"fundo-arredondado\""), 1)
-}
+/// Só as penas, sem quadrado de fundo: o SVG é transparente e o pelicano o desenha sobre a barra.
 pub fn icone_para(produto:Produto,personalizada:bool,tamanho:f32)->SvgView {
-    pelicano::svg(crate::icones::carregar(svg_opaco(produto,personalizada))).width(tamanho).height(tamanho)
+    pelicano::svg(crate::icones::carregar(svg_para(produto,personalizada))).width(tamanho).height(tamanho)
 }
 pub fn icone_atual(tamanho:f32)->SvgView {
     icone_para(produto_atual(),COR_PERSONALIZADA.load(Ordering::Relaxed),tamanho)
@@ -134,20 +114,13 @@ mod testes {
         assert!(svg_para(Produto::FeatherSheet,false).contains("#287846"));
     }
     #[test]
-    fn renderizacao_cobre_cantos_transparentes_sem_borda_preta() {
+    fn logos_sem_quadrado_de_fundo() {
         for produto in [Produto::FeatherSheet,Produto::FeatherDocs,Produto::FeatherSlide] {
-            let original=svg_para(produto,false);
-            let rendered=svg_opaco(produto,false);
-            assert!(!original.contains("fundo-opaco"),
-                "Os SVGs editáveis devem manter a transparência original.");
-            let fundo=rendered.find("id=\"fundo-opaco\"")
-                .expect("O rasterizador precisa receber um fundo opaco.");
-            let arredondado=rendered.find("id=\"fundo-arredondado\"")
-                .expect("Os cantos originais permanecem arredondados.");
-            assert!(fundo<arredondado);
-            assert!(rendered.contains("width=\"128\" height=\"128\" fill=\"#"));
-            assert!(rendered.contains("id=\"pena-principal\""));
-            assert!(rendered.contains("id=\"pena-secundaria\""));
+            for personalizada in [false,true] {
+                let svg=svg_para(produto,personalizada);
+                assert!(!svg.contains("<rect"),"{produto:?}: a logo é só as penas");
+                assert!(!svg.contains("fundo"),"{produto:?}: sem o degradê do fundo");
+            }
         }
     }
     #[test]
