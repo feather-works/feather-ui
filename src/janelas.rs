@@ -61,6 +61,8 @@ impl<T: Copy + Eq> Janelas<T> {
             size: tamanho,
             decorations: !barra_propria,
             close_on_request: false,
+            // Os cantos arredondados da moldura (cromo::moldura_redimensionavel_com).
+            transparent: barra_propria,
             ..Default::default()
         }))
     }

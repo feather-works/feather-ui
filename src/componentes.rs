@@ -138,6 +138,28 @@ pub fn grupo_faixa_compacto<'a, M: 'a>(
     itens: Element<'a, M>,
     rotulo: &'static str,
 ) -> Element<'a, M> {
+    grupo_com_legenda(itens, text(rotulo).size(11).no_wrap().color(COR_TEXTO_MUTED()).into())
+}
+
+/// [`grupo_faixa_compacto`] com a setinha ↘ ao lado da legenda, como o Office:
+/// abre a janela completa do grupo (Fonte, Alinhamento, Número → Formatar células).
+pub fn grupo_faixa_com_janela<'a, M: Clone + 'a>(
+    itens: Element<'a, M>,
+    rotulo: &'static str,
+    abrir: Option<(&'static str, M)>,
+) -> Element<'a, M> {
+    let mut legenda = row![text(rotulo).size(11).no_wrap().color(COR_TEXTO_MUTED())]
+        .spacing(4).align(Align::Center);
+    if let Some((dica, msg)) = abrir {
+        let botao = button(crate::icones::icone("arrow-down-right", 11.))
+            .padding([1, 3]).style(estilo_botao_pequeno(false)).on_press(msg);
+        legenda = legenda.push(tooltip(botao, dica, TooltipPosition::Bottom)
+            .padding([4, 8]).style(crate::tema::estilo_dica));
+    }
+    grupo_com_legenda(itens, legenda.into())
+}
+
+fn grupo_com_legenda<'a, M: 'a>(itens: Element<'a, M>, legenda: Element<'a, M>) -> Element<'a, M> {
     row![
         container(
             column![
@@ -145,7 +167,7 @@ pub fn grupo_faixa_compacto<'a, M: 'a>(
                     .height(ALTURA_CONTEUDO_GRUPO_COMPACTO)
                     .align_y(Align::Center)
                     .clip(true),
-                text(rotulo).size(11).no_wrap().color(COR_TEXTO_MUTED()),
+                legenda,
             ]
             .align(Align::Center)
             .spacing(3),
@@ -172,6 +194,8 @@ mod testes {
         const _: () = assert!(ALTURA_GRUPO_COMPACTO <= 100.0);
         let _grupo: Element<'_, ()> =
             grupo_faixa_compacto(text("controles").into(), "Fonte");
+        let _com_janela: Element<'_, ()> =
+            super::grupo_faixa_com_janela(text("controles").into(), "Fonte", Some(("Formatar", ())));
     }
 
     #[test]

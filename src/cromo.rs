@@ -21,6 +21,9 @@ pub fn moldura_janela<'a, M: 'a>(conteudo: Element<'a, M>) -> Element<'a, M> {
 /// Espessura da borda que redimensiona a janela sem moldura do sistema.
 pub const BORDA_REDIMENSIONAR: f32 = 4.0;
 
+/// Raio dos cantos da janela com barra própria (fora de maximizada).
+pub const RAIO_JANELA: f32 = 14.0;
+
 /// [`moldura_janela`] para janela sem moldura do sistema (barra própria): uma faixa de
 /// [`BORDA_REDIMENSIONAR`] px em volta, com o cursor de redimensionar, que pede
 /// `ao_redimensionar(direção)` — o app responde com `WindowCmd::DragResize(direção)`.
@@ -29,10 +32,45 @@ pub fn moldura_redimensionavel<'a, M: Clone + 'a>(
     conteudo: Element<'a, M>,
     ao_redimensionar: impl Fn(pelicano::ResizeDirection) -> M,
 ) -> Element<'a, M> {
+    bordas_redimensionar(moldura_janela(conteudo), false, ao_redimensionar)
+}
+
+/// [`moldura_redimensionavel`] para a janela aberta com `transparent: true`, sabendo se
+/// ela está maximizada (`pelicano::Event::Maximized`). Fora de maximizada: cantos
+/// arredondados ([`RAIO_JANELA`]) e a faixa de redimensionar transparente — pintada com o
+/// fundo e com a borda reta de 1 px, parecia uma moldura estranha em volta da janela.
+/// Maximizada: sem faixa nem cantos. No Windows o pelicano não faz janela transparente:
+/// lá fica a moldura reta de sempre.
+pub fn moldura_redimensionavel_com<'a, M: Clone + 'a>(
+    conteudo: Element<'a, M>,
+    maximizada: bool,
+    ao_redimensionar: impl Fn(pelicano::ResizeDirection) -> M,
+) -> Element<'a, M> {
+    if maximizada {
+        return container(conteudo).width(Length::FILL).height(Length::FILL)
+            .style(|_| Style::default().background(COR_FUNDO_JANELA())).into();
+    }
+    if cfg!(windows) {
+        return moldura_redimensionavel(conteudo, ao_redimensionar);
+    }
+    // `clip` corta o conteúdo (a barra de título) no raio dos cantos.
+    let janela = container(conteudo).padding(1).clip(true).width(Length::FILL).height(Length::FILL)
+        .style(|_| Style::default().background(COR_FUNDO_JANELA())
+            .border(Border::rounded(RAIO_JANELA).color(COR_BORDA(), 1.0)))
+        .into();
+    bordas_redimensionar(janela, true, ao_redimensionar)
+}
+
+/// A faixa de [`BORDA_REDIMENSIONAR`] px em volta de `janela`, com o cursor de cada lado.
+fn bordas_redimensionar<'a, M: Clone + 'a>(
+    janela: Element<'a, M>,
+    transparente: bool,
+    ao_redimensionar: impl Fn(pelicano::ResizeDirection) -> M,
+) -> Element<'a, M> {
     use pelicano::{CursorIcon as C, ResizeDirection as D};
     let b = BORDA_REDIMENSIONAR;
     let borda = |w: Length, h: Length, d: D, c: C| -> Element<'a, M> {
-        mouse_area(container(Space::new(w, h)).style(|_| Style::default().background(COR_FUNDO_JANELA())))
+        mouse_area(container(Space::new(w, h)).style(move |_| if transparente { Style::default() } else { Style::default().background(COR_FUNDO_JANELA()) }))
             .on_press(ao_redimensionar(d))
             .cursor_icon(c)
             .into()
@@ -46,7 +84,7 @@ pub fn moldura_redimensionavel<'a, M: Clone + 'a>(
         ],
         row![
             borda(fixo, Length::FILL, D::West, C::WResize),
-            moldura_janela(conteudo),
+            janela,
             borda(fixo, Length::FILL, D::East, C::EResize),
         ]
         .height(Length::FILL),
@@ -126,7 +164,7 @@ pub fn barra_editor<'a, M: Clone + 'static>(
         .push(horizontal_space())
         .push(acao("settings", crate::idioma::t("Configurações"), Some(abrir_configuracoes)));
     column![
-        container(itens).padding([0, 12]).width(Length::FILL)
+        container(itens).padding([0, 12]).align_y(Align::Center).width(Length::FILL)
             .height(BARRA_ALTURA).style(estilo_container_topo),
         linha(),
     ].into()
