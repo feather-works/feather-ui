@@ -70,6 +70,39 @@ pub fn rgba_para_hsva(c: [u8; 4], matiz_antes: f32) -> [f32; 4] {
     [h.rem_euclid(360.0), if mx <= 0.0 { 0.0 } else { d / mx }, mx, c[3] as f32 / 255.0]
 }
 
+/// Aplica um evento do painel ao estado do app (HSVA e o texto do campo hex) e devolve a cor
+/// nova (`#rrggbb` ou `#rrggbbaa`) quando ela muda; `Fechar` e entradas inválidas dão `None`.
+pub fn aplicar(evento: Evento, hsva: &mut [f32; 4], hex: &mut String) -> Option<String> {
+    let do_hsva = |h: &[f32; 4]| {
+        let [r, g, b] = hsv_para_rgb(h[0], h[1], h[2]);
+        hex_de([r, g, b, (h[3] * 255.).round() as u8])
+    };
+    let nova = match evento {
+        Evento::Fechar => return None,
+        // Vazia = sem cor: o estado fica como estava.
+        Evento::Escolhida(cor) if cor.is_empty() => return Some(cor),
+        Evento::Escolhida(cor) => cor,
+        Evento::SaturacaoBrilho(s, v) => { hsva[1] = s.clamp(0., 1.); hsva[2] = v.clamp(0., 1.); do_hsva(hsva) }
+        Evento::Matiz(h) => { hsva[0] = h.rem_euclid(360.); do_hsva(hsva) }
+        Evento::Alfa(a) => { hsva[3] = a.clamp(0., 1.); do_hsva(hsva) }
+        Evento::TextoHex(valor) => {
+            *hex = valor.clone();
+            if !hex_valido(&valor) { return None; }
+            format!("#{}", valor.trim().trim_start_matches('#').to_lowercase())
+        }
+        Evento::Canal(i, valor) => {
+            let n = valor.trim().parse::<u8>().ok().filter(|_| i < 4)?;
+            let mut rgba = rgba_de(&do_hsva(hsva));
+            rgba[i] = n;
+            hex_de(rgba)
+        }
+    };
+    if !hex_valido(&nova) { return None; }
+    *hsva = rgba_para_hsva(rgba_de(&nova), hsva[0]);
+    *hex = nova.clone();
+    Some(nova)
+}
+
 /// Traduz o arrasto do mouse na área em (x, y) de 0 a 1; `None` se o evento não conta.
 fn arrasto(arrastando: &mut bool, ev: &Event, b: Rect, c: Option<Point>) -> Option<(f32, f32)> {
     let norm = |p: Point| (((p.x - b.x) / b.width).clamp(0.0, 1.0), ((p.y - b.y) / b.height).clamp(0.0, 1.0));
@@ -208,20 +241,6 @@ fn xadrez(r: &mut Renderer, b: Rect) {
     }
 }
 
-/// A prévia da cor atual (com xadrez por baixo se tem transparência).
-struct Previa {
-    cor: Color,
-}
-
-impl<M> Program<M> for Previa {
-    type State = ();
-
-    fn draw(&self, _: &(), r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
-        xadrez(r, b);
-        cheio(r, b, self.cor);
-    }
-}
-
 fn cor(hex: &str) -> Color {
     let [r, g, b, a] = rgba_de(hex);
     Color::rgb8(r, g, b).alpha(a as f32 / 255.0)
@@ -246,12 +265,9 @@ pub fn painel_embutido<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], tex
 fn painel_base<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], texto_hex: &str, embutido: bool) -> Element<'a, Evento> {
     const LARGURA: f32 = 264.0;
     let rgba = rgba_de(atual);
-    let quadrado = program(Quadrado { hsva }).width(Length::FILL).height(150.0);
-    let matiz = program(BarraMatiz { hsva }).width(16.0).height(150.0);
+    let quadrado = program(Quadrado { hsva }).width(Length::FILL).height(120.0);
+    let matiz = program(BarraMatiz { hsva }).width(16.0).height(120.0);
     let alfa = program(BarraAlfa { hsva }).width(Length::FILL).height(14.0);
-    let previa = program(Previa {
-        cor: if atual.is_empty() { Color::TRANSPARENT } else { cor(atual) }
-    }).width(34.0).height(34.0);
 
     let campo = |rotulo: &'static str, i: usize| -> Element<'a, Evento> {
         column![
@@ -287,10 +303,8 @@ fn painel_base<'a>(titulo: &'static str, atual: &str, hsva: [f32;4], texto_hex: 
     }
     let conteudo = column![
         text(titulo).size(12).color(COR_TEXTO_MUTED()),
-        row![quadrado, matiz].spacing(8).height(150.0),
+        row![quadrado, matiz].spacing(8).height(120.0),
         alfa,
-        row![previa, text(crate::idioma::t("Prévia")).size(11).color(COR_TEXTO_MUTED())]
-            .spacing(10).align(Align::Center),
         row![
             column![
                 text_input("#rrggbb", texto_hex.to_owned()).on_input(Evento::TextoHex)
@@ -350,11 +364,19 @@ mod testes {
         assert!(matches!(m[..], [Evento::Matiz(h), Evento::Matiz(f)] if (h - 72.0).abs() < 1e-3 && f == 359.99));
         let a = arrastar(&BarraAlfa { hsva });
         assert!(matches!(a[..], [Evento::Alfa(x), Evento::Alfa(1.0)] if (x - 0.25).abs() < 1e-6));
-        // A prévia só desenha: não publica nada.
-        let mut fora: Vec<Evento> = Vec::new();
-        let c = Program::<Evento>::update(&Previa { cor: Color::WHITE }, &mut (), &Event::MousePressed(MouseButton::Left),
-            Rect::new(Point::ORIGIN, Size::new(10.0, 10.0)), Some(Point::new(5.0, 5.0)), &mut |e| fora.push(e));
-        assert!(c == Captured::No && fora.is_empty());
+    }
+    #[test]
+    fn aplicar_eventos_ao_estado() {
+        let (mut hsva, mut hex) = ([0., 1., 1., 1.], String::from("#ff0000"));
+        assert_eq!(aplicar(Evento::Canal(1, "255".into()), &mut hsva, &mut hex).as_deref(), Some("#ffff00"));
+        assert_eq!(hex, "#ffff00");
+        assert!((hsva[0] - 60.).abs() < 1e-3);
+        assert_eq!(aplicar(Evento::TextoHex("#12".into()), &mut hsva, &mut hex), None);
+        assert_eq!(hex, "#12");
+        assert_eq!(aplicar(Evento::TextoHex("00FF00".into()), &mut hsva, &mut hex).as_deref(), Some("#00ff00"));
+        assert_eq!(aplicar(Evento::Canal(0, "300".into()), &mut hsva, &mut hex), None);
+        assert_eq!(aplicar(Evento::Escolhida(String::new()), &mut hsva, &mut hex).as_deref(), Some(""));
+        assert_eq!(aplicar(Evento::Fechar, &mut hsva, &mut hex), None);
     }
     #[test]
     fn cores_hsv_transparencia_e_validacao() {
