@@ -6,7 +6,7 @@
 //! documento ([`Metricas`]). Nada é gravado em disco nem sai da máquina.
 use crate::tema::*;
 use pelicano::{button, column, container, program, row, scrollable, stack, svg, text, text_input, Align, Background,
-    Border, Color, Element, Font, Length, Point, Program, Rect, Renderer, Size, Space, Style, Svg, Task, Theme};
+    Border, Color, Element, Font, Length, Point, Program, Rect, Renderer, Space, Style, Svg, Task, Theme};
 use std::{collections::VecDeque, time::Instant};
 
 const MAX_REGISTROS: usize = 1_000;
@@ -229,6 +229,8 @@ pub struct Monitor {
     cpu: f32,
     cpu_anterior: Option<(u64, u64)>,
     historico: Vec<u64>,
+    /// CPU (%) de cada amostra, junto com `historico`.
+    historico_cpu: Vec<f32>,
     amostras: usize,
     menu_amostras: bool,
     pub console: Console,
@@ -243,6 +245,7 @@ impl Monitor {
             cpu: 0.0,
             cpu_anterior: None,
             historico: Vec::new(),
+            historico_cpu: Vec::new(),
             amostras: MAX_AMOSTRAS,
             menu_amostras: false,
             console: Console::novo(aplicativo),
@@ -268,6 +271,11 @@ impl Monitor {
         self.rss_kb
     }
 
+    /// CPU da última amostra (% da capacidade total); `None` antes da segunda amostra.
+    pub fn cpu(&self) -> Option<f32> {
+        self.cpu_anterior.map(|_| self.cpu)
+    }
+
     pub fn amostras(&self) -> usize {
         self.amostras
     }
@@ -290,6 +298,10 @@ impl Monitor {
             if let Some((proc_antes, total_antes)) = self.cpu_anterior {
                 self.cpu = (proc.saturating_sub(proc_antes) as f32
                     / total.saturating_sub(total_antes).max(1) as f32 * 100.0).clamp(0.0, 100.0);
+                self.historico_cpu.push(self.cpu);
+                if self.historico_cpu.len() > MAX_AMOSTRAS {
+                    self.historico_cpu.remove(0);
+                }
             }
             self.cpu_anterior = Some((proc, total));
         }
@@ -382,7 +394,7 @@ impl Monitor {
             .into()
     }
 
-    fn view_console<'a, M: Clone + 'static>(&'a self, msg: impl Fn(Evento) -> M + Clone + 'a) -> Element<'a, M> {
+    pub fn view_console<'a, M: Clone + 'static>(&'a self, msg: impl Fn(Evento) -> M + Clone + 'a) -> Element<'a, M> {
         let console = &self.console;
         let mut filtros = row![].spacing(4);
         for (nome, nivel) in [
@@ -476,8 +488,24 @@ impl Monitor {
         .into()
     }
 
-    fn view_memoria<'a, M: Clone + 'static>(&'a self, msg: impl Fn(Evento) -> M + Clone + 'a) -> Element<'a, M> {
-        let mib = |kb: u64| if kb > 0 { format!("{:.1} MiB", kb as f64 / 1024.) } else { "—".into() };
+    pub fn view_memoria<'a, M: Clone + 'static>(&'a self, msg: impl Fn(Evento) -> M + Clone + 'a) -> Element<'a, M> {
+        self.view_memoria_com(msg, Vec::new(), None)
+    }
+
+    /// Como `view_memoria`, com linhas do aplicativo embaixo dos gráficos ("Páginas desenhadas", "3 · 16 MB")
+    /// e um botão de ação opcional ("Liberar cache de páginas").
+    pub fn view_memoria_com<'a, M: Clone + 'static>(
+        &'a self,
+        msg: impl Fn(Evento) -> M + Clone + 'a,
+        extras: Vec<(String, String)>,
+        acao: Option<(String, M)>,
+    ) -> Element<'a, M> {
+        let mib = |kb: u64| match kb {
+            0 => "—".into(),
+            // "1226.0 MiB" não cabe no cartão; acima de 1 GiB mostra "1.2 GiB".
+            k if k >= 1024 * 1024 => format!("{:.1} GiB", k as f64 / (1024. * 1024.)),
+            k => format!("{:.0} MiB", k as f64 / 1024.),
+        };
         let porcentagem_rss = percentual_rss(self.rss_kb, ram_total_kb());
         let porcentagem_cpu = self.cpu_anterior.map(|_| self.cpu);
         let cartoes = row![
@@ -491,8 +519,8 @@ impl Monitor {
         ].spacing(14);
 
         let titulo = row![
-            crate::icones::icone("chart-bar", 20.0).color(verde()),
-            text(crate::idioma::t("Histórico de memória")).size(16),
+            crate::icones::icone("chart-line", 20.0).color(verde()),
+            text(crate::idioma::t("Recursos")).size(16),
             Space::new(Length::FILL, 0.0),
             button(row![
                 text(crate::idioma::tf("Últimas {} amostras", &[&self.amostras])).size(11),
@@ -503,18 +531,34 @@ impl Monitor {
                 .style(estilo_botao_secundario)
                 .on_press(msg(Evento::AlternarAmostras)),
         ].spacing(11).align(Align::Center);
-        let grafico = program(GraficoMemoria { amostras: &self.historico, janela: self.amostras })
-            .width(Length::FILL)
-            .height(Length::FILL);
-        let grafico_base = container(column![
+        let item = |rotulo: String, valor: String| -> Element<'a, M> {
+            row![text(rotulo).size(12).color(COR_TEXTO_MUTED()), Space::new(Length::FILL, 0.0), text(valor).size(12)]
+                .spacing(8).into()
+        };
+        let ultimas = |v: &[f32]| v[v.len().saturating_sub(self.amostras)..].to_vec();
+        let ram: Vec<f32> = self.historico.iter().map(|&kb| kb as f32 / 1024.0).collect();
+        let maior_ram = ram.iter().copied().fold(1.0, f32::max) * 1.1;
+        let logicos = std::thread::available_parallelism().map_or(0, |n| n.get());
+        let fisicos = nucleos_fisicos().unwrap_or(logicos);
+        let cpu = if self.cpu_anterior.is_some() { format!("{:.0}%", self.cpu) } else { "—".into() };
+        let mut corpo = column![
             titulo,
-            grafico,
-            text(if self.historico.is_empty() {
-                crate::idioma::t("Aguardando uma amostra disponível neste sistema…")
-            } else {
-                crate::idioma::t("Cada barra representa uma amostra de memória do processo (RSS).")
-            }).size(11).color(COR_TEXTO_MUTED()),
-        ].spacing(12))
+            item(crate::idioma::t("Memória RAM").into(), format!("{} · pico {}", mib(self.rss_kb), mib(self.pico_kb))),
+            linha(ultimas(&ram), maior_ram, verde()),
+            item("CPU".into(), format!("{cpu} · {fisicos} núcleos · {logicos} threads")),
+            linha(ultimas(&self.historico_cpu), 100.0, roxo()),
+        ].spacing(10);
+        if let Some(t) = threads_atuais() {
+            corpo = corpo.push(item(crate::idioma::t("Threads do app").into(), t.to_string()));
+        }
+        for (rotulo, valor) in extras {
+            corpo = corpo.push(item(rotulo, valor));
+        }
+        if let Some((rotulo, m)) = acao {
+            corpo = corpo.push(button(text(rotulo).size(12).color(COR_AZUL_ACENTO())).padding(0)
+                .style(|_, _| Style::default()).on_press(m));
+        }
+        let grafico_base = container(corpo)
             .padding(16)
             .width(Length::FILL)
             .height(Length::FILL)
@@ -560,7 +604,7 @@ impl Monitor {
             .into()
     }
 
-    fn view_metricas<'a, M: 'static>(&'a self, metricas: Metricas) -> Element<'a, M> {
+    pub fn view_metricas<'a, M: 'static>(&'a self, metricas: Metricas) -> Element<'a, M> {
         let mut cartoes = row![].spacing(12);
         for (rotulo, valor, detalhe) in metricas.cartoes {
             cartoes = cartoes.push(cartao(rotulo, valor, detalhe));
@@ -628,6 +672,40 @@ fn rss_atual_kb() -> Option<u64> {
     std::fs::read_to_string("/proc/self/status").ok()?
         .lines().find(|l| l.starts_with("VmRSS:"))?
         .split_whitespace().nth(1)?.parse().ok()
+}
+
+/// Threads do processo (Linux: `/proc/self/status`).
+#[cfg(not(windows))]
+fn threads_atuais() -> Option<u64> {
+    std::fs::read_to_string("/proc/self/status").ok()?
+        .lines().find(|l| l.starts_with("Threads:"))?
+        .split_whitespace().nth(1)?.parse().ok()
+}
+
+#[cfg(windows)]
+fn threads_atuais() -> Option<u64> {
+    None
+}
+
+/// Núcleos físicos (Linux: pares únicos `physical id` + `core id` do `/proc/cpuinfo`); `None` sem a informação.
+#[cfg(not(windows))]
+fn nucleos_fisicos() -> Option<usize> {
+    contar_nucleos(&std::fs::read_to_string("/proc/cpuinfo").ok()?)
+}
+
+#[cfg(windows)]
+fn nucleos_fisicos() -> Option<usize> {
+    None
+}
+
+#[cfg_attr(windows, allow(dead_code))]
+fn contar_nucleos(cpuinfo: &str) -> Option<usize> {
+    let mut pares = std::collections::HashSet::new();
+    for bloco in cpuinfo.split("\n\n") {
+        let campo = |nome: &str| bloco.lines().find(|l| l.starts_with(nome))?.split(':').nth(1).map(|v| v.trim().to_owned());
+        if let (Some(f), Some(c)) = (campo("physical id"), campo("core id")) { pares.insert((f, c)); }
+    }
+    (!pares.is_empty()).then_some(pares.len())
 }
 
 /// (tempo de CPU do processo, tempo total do sistema), em ticks.
@@ -765,10 +843,10 @@ fn cartao_destaque<'a, M: 'static>(
     // Ícone ao lado do título (não num selo à esquerda): num cartão de ~270 px
     // o selo e a rosca deixavam ~60 px ao valor, que quebrava sobre o detalhe.
     let conteudo = column![
-        row![crate::icones::icone(icone, 16.0).color(cor), text(titulo).size(13).color(COR_TEXTO_MUTED())]
+        row![crate::icones::icone(icone, 16.0).color(cor), text(titulo).size(13).color(COR_TEXTO_MUTED()).no_wrap().ellipsis()]
             .spacing(7).align(Align::Center),
-        text(valor).size(26).color(COR_TEXTO()),
-        text(detalhe).size(11).color(COR_TEXTO_MUTED()),
+        text(valor).size(22).color(COR_TEXTO()).no_wrap(),
+        text(detalhe).size(11).color(COR_TEXTO_MUTED()).no_wrap().ellipsis(),
     ].spacing(6).width(Length::FILL);
     let mut linha = row![conteudo].spacing(12).align(Align::Center);
     if let Some((pct, cor)) = medidor {
@@ -804,75 +882,36 @@ fn acao<'a, M: Clone + 'static>(rotulo: &'static str, mensagem: M) -> Element<'a
         .into()
 }
 
-/// Calcula teto em MiB com quatro intervalos redondos (1/2/5 × 10^n).
-fn escala_mib(maior_kb: u64) -> f64 {
-    let alvo = ((maior_kb as f64 / 1024.0) * 1.18).max(1.0);
-    let minimo = alvo / 4.0;
-    let magnitude = 10_f64.powf(minimo.log10().floor());
-    let passo = [1.0, 2.0, 5.0, 10.0]
-        .into_iter()
-        .map(|n| n * magnitude)
-        .find(|v| *v >= minimo)
-        .unwrap_or(10.0 * magnitude);
-    passo * 4.0
+/// Gráfico de linha pequeno do quadro Recursos: `valores` de 0 a `maximo`, o último à direita.
+struct GraficoLinha {
+    valores: Vec<f32>,
+    maximo: f32,
+    cor: Color,
 }
 
-/// Gráfico do histórico RSS (MiB) desenhado no Canvas, sem widgets por amostra.
-struct GraficoMemoria<'a> {
-    amostras: &'a [u64],
-    janela: usize,
+fn linha<'a, M: 'static>(valores: Vec<f32>, maximo: f32, cor: Color) -> Element<'a, M> {
+    container(program(GraficoLinha { valores, maximo, cor }).width(Length::FILL).height(Length::FILL))
+        .padding([4, 6]).height(Length::FILL).style(painel).into()
 }
 
-impl<M> Program<M> for GraficoMemoria<'_> {
+impl<M> Program<M> for GraficoLinha {
     type State = ();
 
     fn draw(&self, _: &(), r: &mut Renderer, b: Rect, _: &Theme, _: Option<Point>) {
-        if b.width < 120.0 || b.height < 90.0 {
+        if self.valores.len() < 2 || b.height < 4.0 {
             return;
         }
-        let esquerda = b.x + 75.0;
-        let direita = b.x + b.width - 8.0;
-        let topo = b.y + 9.0;
-        let base = b.y + b.height - 21.0;
-        let largura = (direita - esquerda).max(1.0);
-        let altura = (base - topo).max(1.0);
-        let mut serie = self.amostras.iter().rev().take(self.janela.max(1)).copied().collect::<Vec<_>>();
-        serie.reverse();
-        let maior_kb = serie.iter().copied().max().unwrap_or(0);
-        let teto = escala_mib(maior_kb);
-        let grade = if escuro() { Color::rgb8(79, 84, 94) } else { Color::rgb8(227, 233, 239) };
-        let retangulo = |r: &mut Renderer, x: f32, y: f32, w: f32, h: f32, c: Color| {
-            r.fill_quad(Rect::new(Point::new(x, y), Size::new(w, h)), Some(&c.into()), Border::default(), None)
-        };
-        for marca in 0..=4 {
-            let mib = teto * marca as f64 / 4.0;
-            let y = base - altura * marca as f32 / 4.0;
-            retangulo(r, esquerda, y, largura, 1.0, grade);
-            let rotulo = if mib.fract() == 0.0 { format!("{mib:.0} MiB") } else { format!("{mib:.1} MiB") };
-            // Alinhado à direita e centrado na linha da grade.
-            let m = r.measure(&rotulo, 11.0, Font::DEFAULT, None);
-            r.draw_text(&rotulo, 11.0, Font::DEFAULT, COR_TEXTO_MUTED(), Point::new(esquerda - 11.0 - m.width, y - m.height / 2.0), None);
-        }
-        let janelas = self.janela.max(1) as f32;
-        let passo = largura / janelas;
-        let separacao = if passo > 4.0 { 2.0 } else { 0.5 };
-        let barra_largura = (passo - separacao).max(0.5);
-        let cor = if escuro() { Color::rgb8(72, 193, 118) } else { Color::rgb8(38, 161, 87) };
-        for (i, &kb) in serie.iter().enumerate() {
-            // Amostras ainda não coletadas ficam sem barra, à esquerda.
-            let pos = self.janela.max(serie.len()) - serie.len() + i;
-            let x = esquerda + pos as f32 * passo + separacao * 0.5;
-            let h = ((kb as f64 / 1024.0 / teto) as f32 * altura).clamp(0.0, altura);
-            if h > 0.0 {
-                retangulo(r, x, base - h, barra_largura, h, cor);
-            }
-        }
+        let passo = b.width / (self.valores.len() - 1) as f32;
+        let y = |v: f32| b.y + b.height - 2.0 - (v / self.maximo.max(f32::EPSILON)).clamp(0.0, 1.0) * (b.height - 4.0);
+        let pontos: Vec<Point> = self.valores.iter().enumerate().map(|(i, &v)| Point::new(b.x + i as f32 * passo, y(v))).collect();
+        r.stroke(&pontos, 1.5, self.cor);
     }
 }
 
 #[cfg(test)]
 mod testes {
     use super::*;
+    use pelicano::Size;
 
     #[derive(Clone, Debug)]
     #[allow(dead_code)]
@@ -893,9 +932,16 @@ mod testes {
     }
 
     #[test]
-    fn grafico_desenha_barras_sem_publicar() {
-        let amostras = [10_240, 20_480, 40_960];
-        let g = GraficoMemoria { amostras: &amostras, janela: 20 };
+    fn nucleos_fisicos_contam_pares_unicos() {
+        let info = "processor\t: 0\nphysical id\t: 0\ncore id\t: 0\n\nprocessor\t: 1\nphysical id\t: 0\ncore id\t: 0\n\n\
+            processor\t: 2\nphysical id\t: 0\ncore id\t: 1\n";
+        assert_eq!(contar_nucleos(info), Some(2));
+        assert_eq!(contar_nucleos("processor\t: 0\n"), None);
+    }
+
+    #[test]
+    fn grafico_desenha_linha_sem_publicar() {
+        let g = GraficoLinha { valores: vec![10.0, 20.0, 40.0], maximo: 44.0, cor: Color::BLACK };
         let mut fora: Vec<Teste> = Vec::new();
         let b = Rect::new(Point::ORIGIN, Size::new(400.0, 200.0));
         let c = Program::<Teste>::update(&g, &mut (), &pelicano::Event::MousePressed(pelicano::MouseButton::Left), b, Some(Point::new(5.0, 5.0)), &mut |e| fora.push(e));
@@ -952,8 +998,6 @@ mod testes {
         }
         let _: Task<Teste> = m.atualizar(Evento::Amostras(1000));
         assert_eq!(m.amostras(), 80);
-        assert_eq!(escala_mib(121 * 1024), 200.0);
-        assert_eq!(escala_mib(0), 2.0);
     }
 
     #[test]

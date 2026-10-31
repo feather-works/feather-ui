@@ -293,7 +293,8 @@ mod testes_ui012 {
             "seta_direita", "seta_esquerda", "recentes", "componentes", "atalhos_teclado",
             "desmesclar_celulas",
         ];
-        let novos = &ribbon::FALTANTES[16..];
+        // Os 24 desse lote; os de alinhar objetos (FeatherPDF) vêm depois.
+        let novos = &ribbon::FALTANTES[16..40];
         assert_eq!(novos.len(), 24);
         for &(chave, alias, original) in novos {
             assert_eq!(svg_ribbon(chave), Some(original), "chave pt: {chave}");
@@ -332,7 +333,7 @@ mod testes_ui012 {
             }
         }
         assert_eq!(
-            hash, 0x979c9bf809c867af,
+            hash, 0xc15cdf64fb0c6ded,
             "o desenho SVG embutido mudou; revisar visual Linux/Windows antes de atualizar o baseline",
         );
     }

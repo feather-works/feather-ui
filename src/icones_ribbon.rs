@@ -550,4 +550,13 @@ pub(super) const FALTANTES: &[(&str, &str, &str)] = &[
     ("continuar_serie", "arrow-step", include_str!("../assets/ribbon/continuar_serie.svg")),
     ("autoajuste_altura", "arrow-autofit-height", include_str!("../assets/ribbon/autoajuste_altura.svg")),
     ("desmesclar_celulas", "desmesclar_celulas", include_str!("../assets/ribbon/desmesclar_celulas.svg")),
+    // Alinhar e distribuir objetos (formas, imagens, caixas): guia + objetos.
+    ("objeto_alinhar_esquerda", "objeto_alinhar_esquerda", include_str!("../assets/ribbon/objeto_alinhar_esquerda.svg")),
+    ("objeto_alinhar_centro", "objeto_alinhar_centro", include_str!("../assets/ribbon/objeto_alinhar_centro.svg")),
+    ("objeto_alinhar_direita", "objeto_alinhar_direita", include_str!("../assets/ribbon/objeto_alinhar_direita.svg")),
+    ("objeto_alinhar_topo", "objeto_alinhar_topo", include_str!("../assets/ribbon/objeto_alinhar_topo.svg")),
+    ("objeto_alinhar_meio", "objeto_alinhar_meio", include_str!("../assets/ribbon/objeto_alinhar_meio.svg")),
+    ("objeto_alinhar_base", "objeto_alinhar_base", include_str!("../assets/ribbon/objeto_alinhar_base.svg")),
+    ("distribuir_horizontal", "distribuir_horizontal", include_str!("../assets/ribbon/distribuir_horizontal.svg")),
+    ("distribuir_vertical", "distribuir_vertical", include_str!("../assets/ribbon/distribuir_vertical.svg")),
 ];

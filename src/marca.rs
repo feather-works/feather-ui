@@ -6,7 +6,7 @@ use crate::tema;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Produto { FeatherSheet=0, FeatherDocs=1, FeatherSlide=2 }
+pub enum Produto { FeatherSheet=0, FeatherDocs=1, FeatherSlide=2, FeatherPDF=3 }
 static PRODUTO: AtomicU8=AtomicU8::new(0);
 static COR_PERSONALIZADA: AtomicBool=AtomicBool::new(false);
 
@@ -15,6 +15,7 @@ pub const PENA_ORIGINAL:&str=include_str!("../assets/logos/pena.svg");
 pub const SHEET_SVG:&str=include_str!("../assets/logos/feathersheet.svg");
 pub const DOCS_SVG:&str=include_str!("../assets/logos/featherdocs.svg");
 pub const SLIDE_SVG:&str=include_str!("../assets/logos/featherslide.svg");
+pub const PDF_SVG:&str=include_str!("../assets/logos/featherpdf.svg");
 
 pub fn definir_marca(produto:Produto, personalizada:bool) {
     PRODUTO.store(produto as u8,Ordering::Relaxed);
@@ -22,7 +23,7 @@ pub fn definir_marca(produto:Produto, personalizada:bool) {
 }
 pub fn produto_atual()->Produto {
     match PRODUTO.load(Ordering::Relaxed) {
-        1=>Produto::FeatherDocs,2=>Produto::FeatherSlide,_=>Produto::FeatherSheet
+        1=>Produto::FeatherDocs,2=>Produto::FeatherSlide,3=>Produto::FeatherPDF,_=>Produto::FeatherSheet
     }
 }
 /// Identificador do aplicativo no sistema: o nome do `.desktop` instalado
@@ -32,6 +33,7 @@ pub fn id_aplicativo()->&'static str {
         Produto::FeatherSheet=>"feathersheet",
         Produto::FeatherDocs=>"featherdocs",
         Produto::FeatherSlide=>"featherslide",
+        Produto::FeatherPDF=>"featherpdf",
     }
 }
 
@@ -70,6 +72,7 @@ pub fn svg_para(produto:Produto,personalizada:bool)->String {
             Produto::FeatherSheet=>SHEET_SVG,
             Produto::FeatherDocs=>DOCS_SVG,
             Produto::FeatherSlide=>SLIDE_SVG,
+            Produto::FeatherPDF=>PDF_SVG,
         }.to_owned();
     }
     let cor=tema::acento_hex();
@@ -101,6 +104,12 @@ fn svg_opaco(produto:Produto, personalizada:bool)->String {
 pub fn icone_para(produto:Produto,personalizada:bool,tamanho:f32)->SvgView {
     pelicano::svg(crate::icones::carregar(svg_opaco(produto,personalizada))).width(tamanho).height(tamanho)
 }
+/// Só as penas, sem o quadrado arredondado de fundo (barra de título do FeatherPDF).
+pub fn pena_atual(tamanho:f32)->SvgView {
+    let svg=svg_para(produto_atual(),COR_PERSONALIZADA.load(Ordering::Relaxed))
+        .replacen("<rect id=\"fundo-arredondado\"","<rect id=\"fundo-arredondado\" visibility=\"hidden\"",1);
+    pelicano::svg(crate::icones::carregar(svg)).width(tamanho).height(tamanho)
+}
 pub fn icone_atual(tamanho:f32)->SvgView {
     icone_para(produto_atual(),COR_PERSONALIZADA.load(Ordering::Relaxed),tamanho)
 }
@@ -113,6 +122,7 @@ mod testes {
             (Produto::FeatherSheet,"#287846"),
             (Produto::FeatherDocs,"#236ac7"),
             (Produto::FeatherSlide,"#d1a219"),
+            (Produto::FeatherPDF,"#c5352b"),
         ] {
             let svg=svg_para(produto,false);
             assert!(svg.contains(cor));
@@ -135,7 +145,7 @@ mod testes {
     }
     #[test]
     fn renderizacao_cobre_cantos_transparentes_sem_borda_preta() {
-        for produto in [Produto::FeatherSheet,Produto::FeatherDocs,Produto::FeatherSlide] {
+        for produto in [Produto::FeatherSheet,Produto::FeatherDocs,Produto::FeatherSlide,Produto::FeatherPDF] {
             let original=svg_para(produto,false);
             let rendered=svg_opaco(produto,false);
             assert!(!original.contains("fundo-opaco"),
