@@ -151,3 +151,30 @@ world	Suite	world,globe,language,idioma,mundo	M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18
 sparkles	Suite	sparkles,new,novidades,novo,brilho	M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z
 history	Suite	history,recover,recuperar,historico,voltar	M12 8l0 4l2 2|M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5
 rocket	Suite	rocket,start,launch,comecar,inicio	M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3|M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3|M14 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0
+book-2	PDF	book,2	M19 4v16h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12z|M19 16h-12a2 2 0 0 0 -2 2|M9 8h6
+chevrons-left	PDF	chevrons,left	M11 7l-5 5l5 5|M17 7l-5 5l5 5
+chevrons-right	PDF	chevrons,right	M7 7l5 5l-5 5|M13 7l5 5l-5 5
+file-text	PDF	file,text	M14 3v4a1 1 0 0 0 1 1h4|M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z|M9 9l1 0|M9 13l6 0|M9 17l6 0
+file-type-pdf	PDF	file,type,pdf	M14 3v4a1 1 0 0 0 1 1h4|M5 12v-7a2 2 0 0 1 2 -2h7l5 5v4|M5 18h1.5a1.5 1.5 0 0 0 0 -3h-1.5v6|M17 18h2|M20 15h-3v6|M11 15v6h1a2 2 0 0 0 2 -2v-2a2 2 0 0 0 -2 -2h-1z
+file-zip	PDF	file,zip	M6 20.735a2 2 0 0 1 -1 -1.735v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-1|M11 17a2 2 0 0 1 2 2v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-2a2 2 0 0 1 2 -2z|M11 5l-1 0|M13 7l-1 0|M11 9l-1 0|M13 11l-1 0|M11 13l-1 0|M13 15l-1 0
+file	PDF	file	M14 3v4a1 1 0 0 0 1 1h4|M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z
+files	PDF	files	M15 3v4a1 1 0 0 0 1 1h4|M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z|M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2
+hand-move	PDF	hand,move	M8 13v-8.5a1.5 1.5 0 0 1 3 0v7.5|M11 11.5v-2a1.5 1.5 0 0 1 3 0v2.5|M14 10.5a1.5 1.5 0 0 1 3 0v1.5|M17 11.5a1.5 1.5 0 0 1 3 0v4.5a6 6 0 0 1 -6 6h-2h.208a6 6 0 0 1 -5.012 -2.7l-.196 -.3c-.312 -.479 -1.407 -2.388 -3.286 -5.728a1.5 1.5 0 0 1 .536 -2.022a1.867 1.867 0 0 1 2.28 .28l1.47 1.47|M2.541 5.594a13.487 13.487 0 0 1 2.46 -1.427|M14 3.458c1.32 .354 2.558 .902 3.685 1.612
+layout-columns	PDF	layout,columns	M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z|M12 4l0 16
+maximize	PDF	maximize	M4 8v-2a2 2 0 0 1 2 -2h2|M4 16v2a2 2 0 0 0 2 2h2|M16 4h2a2 2 0 0 1 2 2v2|M16 20h2a2 2 0 0 0 2 -2v-2
+moon	PDF	moon	M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z
+note	PDF	note	M13 20l7 -7|M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7
+paperclip	PDF	paperclip	M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5
+photo-scan	PDF	photo,scan	M15 8h.01|M6 13l2.644 -2.644a1.21 1.21 0 0 1 1.712 0l3.644 3.644|M13 13l1.644 -1.644a1.21 1.21 0 0 1 1.712 0l1.644 1.644|M4 8v-2a2 2 0 0 1 2 -2h2|M4 16v2a2 2 0 0 0 2 2h2|M16 4h2a2 2 0 0 1 2 2v2|M16 20h2a2 2 0 0 0 2 -2v-2
+rotate-clockwise	PDF	rotate,clockwise	M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5
+ruler-measure	PDF	ruler,measure	M19.875 12c.621 0 1.125 .512 1.125 1.143v5.714c0 .631 -.504 1.143 -1.125 1.143h-15.875a1 1 0 0 1 -1 -1v-5.857c0 -.631 .504 -1.143 1.125 -1.143h15.75z|M9 12v2|M6 12v3|M12 12v3|M18 12v3|M15 12v2|M3 3v4|M3 5h18|M21 3v4
+scan	PDF	scan	M4 7v-1a2 2 0 0 1 2 -2h2|M4 17v1a2 2 0 0 0 2 2h2|M16 4h2a2 2 0 0 1 2 2v1|M16 20h2a2 2 0 0 0 2 -2v-1|M5 12l14 0
+square-rounded-minus	PDF	square,rounded,minus	M9 12h6|M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z
+sun	PDF	sun	M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0|M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7
+text-scan-2	PDF	text,scan,2	M4 8v-2a2 2 0 0 1 2 -2h2|M4 16v2a2 2 0 0 0 2 2h2|M16 4h2a2 2 0 0 1 2 2v2|M16 20h2a2 2 0 0 0 2 -2v-2|M8 12h8|M8 9h6|M8 15h4
+writing-sign	PDF	writing,sign	M3 19c3.333 -2 5 -4 5 -6c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 2.877 2.5 4c1.5 2 2.5 2.5 3.5 1c.667 -1 1.167 -1.833 1.5 -2.5c1 2.333 2.333 3.5 4 3.5h2.5|M20 17v-12c0 -1.121 -.879 -2 -2 -2s-2 .879 -2 2v12l2 2l2 -2z|M16 7h4
+chevron-left-pipe	PDF	chevron,left,pipe	M7 6v12|M18 6l-6 6l6 6
+chevron-right-pipe	PDF	chevron,right,pipe	M6 6l6 6l-6 6|M17 5v13
+crop	PDF	crop	M8 5v10a1 1 0 0 0 1 1h10|M5 8h10a1 1 0 0 1 1 1v10
+message-2	PDF	message,2	M8 9h8|M8 13h6|M9 18h-3a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-3l-3 3l-3 -3z
+scan-eye	PDF	scan,eye	M4 8v-2a2 2 0 0 1 2 -2h2|M4 16v2a2 2 0 0 0 2 2h2|M16 4h2a2 2 0 0 1 2 2v2|M16 20h2a2 2 0 0 0 2 -2v-2|M7 12c3.333 -4.667 6.667 -4.667 10 0|M7 12c3.333 4.667 6.667 4.667 10 0|M12 12h-.01
