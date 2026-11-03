@@ -15,6 +15,7 @@ pub mod dropdown;
 pub mod configuracoes;
 /// Peças da janela de consulta (padrão F1): lateral, cabeçalho, cartões.
 pub mod consulta;
+pub mod novidades;
 pub mod creditos;
 pub mod icones;
 pub mod idioma;
