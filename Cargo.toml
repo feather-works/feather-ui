@@ -10,7 +10,7 @@ repository = "https://github.com/feather-works/feather-ui"
 publish = false
 
 [dependencies]
-pelicano = { git = "https://github.com/feather-works/pelicano.git", tag = "v0.1.27" }
+pelicano = "0.1.29"
 
 # Pressão da caneta (src/caneta.rs). Linux: XInput2 em Rust puro (x11rb,
 # conexão própria, sem libxcb/libXi). Windows: WM_POINTER pela API do sistema.
@@ -49,4 +49,4 @@ opt-level = 3
 
 # Só o exemplo vitrine: terminal embutido e realce de sintaxe no editor.
 [dev-dependencies]
-pelicano = { git = "https://github.com/feather-works/pelicano.git", tag = "v0.1.27", features = ["terminal", "highlighter"] }
+pelicano = { version = "0.1.29", features = ["terminal", "highlighter"] }
