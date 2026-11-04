@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "feather-ui"
-version = "0.3.13"
+version = "0.3.14"
 dependencies = [
  "libc",
  "pelicano",
