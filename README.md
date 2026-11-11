@@ -98,6 +98,7 @@ Os desenhos específicos adicionais estão disponíveis como `editar_dinamica`,
 | `efeitos_imagem` | painel de ajustes rápidos de imagem |
 | `creditos` | bloco "Colaboradores" do Sobre, igual em todos os aplicativos |
 | `tinta` | aba Desenhar: camada transparente de tinta (captura caneta/mouse, desenha, devolve traço/apagar/laço em coordenadas do documento) e os controles das canetas; o motor dos traços fica no `featheroffice-drawing` |
+| `fonte` | Feather Sans, a letra da interface da suíte (OFL 1.1, em `assets/fontes`): `fonte::usar_na_interface()` carrega os seis estilos e a torna a padrão de todas as janelas (`pelicano::set_default_family`); `pelicano::Font::SYSTEM_SANS` continua a do sistema |
 | `caneta` | pressão da caneta para a camada de tinta: `FontePressao` (amostras com instante, casamento por tempo), XInput2 no Linux pelo `x11rb` (Rust puro; só eventos crus dos dispositivos com eixo de pressão, nunca teclado; sob Wayland o app precisa abrir pelo XWayland, ver `deve_usar_x11`/`mesas_conectadas`: no Wayland o winit 0.30 não recebe o clique da caneta), WM_POINTER no Windows, e o diário de diagnóstico. Exemplo: `cargo run --example caneta_diag -- 15` |
 | `texto_contorno` | contorno das letras pela fonte do pelicano (`contornos`, miolos preservados) e `contornos_deformados` com a deformação passada como função — o WordArt de qualquer app usa com `feather_shapes::wordart::transformar`, sem o `feather-ui` depender do `feather-shapes` |
 

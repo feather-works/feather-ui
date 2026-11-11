@@ -37,5 +37,8 @@ pub mod campo_numero;
 
 pub mod formatacao;
 
+/// Feather Sans, a letra da interface (`fonte::usar_na_interface`).
+pub mod fonte;
+
 /// Painel de presets de imagem sem regras de negocio.
 pub mod efeitos_imagem;
