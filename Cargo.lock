@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "feather-ui"
-version = "0.3.15"
+version = "0.3.16"
 dependencies = [
  "libc",
  "pelicano",
@@ -2393,9 +2393,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pelicano"
-version = "0.1.31"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c45ff774425c92f58d1128a2f5d8927515dc9c555017bda063ef17d879a42adf"
+checksum = "bedf7f99e1e93b288d537b818a80ee65506ebf357b374fa41cb41ef33a06465a"
 dependencies = [
  "accesskit",
  "accesskit_winit",
