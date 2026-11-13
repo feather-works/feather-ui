@@ -34,7 +34,30 @@ fn resolver_cores(desenho: &str, cor: &str) -> String {
     resolver_cores_com_tema(desenho, cor, false)
 }
 
+/// Traço dos ícones neste ramo (FeatherPDF, 13/11/2026): 75% do desenhado; o 2 do Tabler pesava na faixa.
+const TRACO: f32 = 0.75;
+
+/// Multiplica cada `stroke-width="N"` do SVG por `TRACO`.
+fn afinar(svg: &str) -> String {
+    let mut saida = String::with_capacity(svg.len());
+    let mut resto = svg;
+    while let Some(i) = resto.find("stroke-width=\"") {
+        let inicio = i + "stroke-width=\"".len();
+        saida.push_str(&resto[..inicio]);
+        resto = &resto[inicio..];
+        let fim = resto.find('"').unwrap_or(resto.len());
+        match resto[..fim].parse::<f32>() {
+            Ok(v) => saida.push_str(&format!("{}", (v * TRACO * 100.0).round() / 100.0)),
+            Err(_) => saida.push_str(&resto[..fim]),
+        }
+        resto = &resto[fim..];
+    }
+    saida.push_str(resto);
+    saida
+}
+
 fn resolver_cores_com_tema(desenho: &str, cor: &str, escuro: bool) -> String {
+    let desenho = &afinar(desenho);
     let mut resultado = desenho.replace("currentColor", cor);
     while let Some(inicio) = resultado.find("var(") {
         let fim = resultado[inicio..]
@@ -94,7 +117,7 @@ fn svg_tabler(nome: &str) -> String {
         .collect::<String>();
     // Os ícones originais do FeatherSheet usam viewBox 16 × 16 e traço 1.4.
     // Os Tabler da suíte continuam em 24 × 24, sem alterar Slide/Docs.
-    let (view_box, traco) = if original_sheet { (16, 1.4) } else { (24, 2.0) };
+    let (view_box, traco) = if original_sheet { (16, 1.4) } else { (24, 2.0 * TRACO) };
     // Variante `-filled` do Tabler: preenchida e sem contorno.
     let (preenchimento, contorno) = if nome.ends_with("-filled") {
         ("#808080", "none")
@@ -162,6 +185,13 @@ pub fn icone_colorido(nome: &str, tamanho: f32, cor: &str) -> SvgView {
 
 #[cfg(test)]
 mod testes_ui012 {
+    #[test]
+    fn afinar_reduz_so_os_tracos() {
+        assert_eq!(super::afinar(r#"<path stroke-width="2" d="M1 2"/><g stroke-width="1.8">"#),
+            r#"<path stroke-width="1.5" d="M1 2"/><g stroke-width="1.35">"#);
+        assert_eq!(super::afinar("<path d=\"M1\"/>"), "<path d=\"M1\"/>");
+    }
+
     use super::*;
     use std::collections::HashSet;
 
@@ -202,7 +232,7 @@ mod testes_ui012 {
         assert!(sheet.contains("stroke-width=\"1.4\""));
         let tabler = svg_tabler("align-center");
         assert!(tabler.contains("viewBox=\"0 0 24 24\""));
-        assert!(tabler.contains("stroke-width=\"2\""));
+        assert!(tabler.contains("stroke-width=\"1.5\""));
     }
 
     #[test]
@@ -333,7 +363,7 @@ mod testes_ui012 {
             }
         }
         assert_eq!(
-            hash, 0xc15cdf64fb0c6ded,
+            hash, 0xc9eb4a4b5cf4e321,
             "o desenho SVG embutido mudou; revisar visual Linux/Windows antes de atualizar o baseline",
         );
     }
