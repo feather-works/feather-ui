@@ -3,7 +3,7 @@
 use pelicano::{Border, Color, Point, Shadow, Status, Style, Theme};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-// Paleta da suíte, clara ou escura, com a cor de destaque escolhida nas Configurações.
+// Paleta da suíte, clara ou escura (o escuro deste ramo é o "grafite quente" do FeatherPDF, 13/11/2026), com a cor de destaque escolhida nas Configurações.
 // Cada cor é uma função (nome em maiúsculas, para manter o jeito de usar de antes) porque
 // muda com o tema em tempo de execução.
 
@@ -76,8 +76,8 @@ pub fn acento_hex() -> &'static str {
 pub fn cor_do_icone(cor: &str) -> String {
     let c = match cor {
         "#1a73e8" | "#0b57d0" => acento_hex().to_string(),
-        "#5f6368" => if escuro() { "#9aa0a6".into() } else { cor.into() },
-        "#202124" => if escuro() { "#e8eaed".into() } else { cor.into() },
+        "#5f6368" => if escuro() { "#b3aca6".into() } else { cor.into() },
+        "#202124" => if escuro() { "#f0ece8".into() } else { cor.into() },
         "#bdc1c6" => if escuro() { "#5f6368".into() } else { cor.into() },
         outra => outra.to_string(),
     };
@@ -85,15 +85,15 @@ pub fn cor_do_icone(cor: &str) -> String {
 }
 
 #[allow(non_snake_case)]
-pub fn COR_FUNDO_JANELA() -> Color { par("#f1f3f4", "#181a1d") }
+pub fn COR_FUNDO_JANELA() -> Color { par("#f1f3f4", "#232120") }
 #[allow(non_snake_case)]
-pub fn COR_PAINEL() -> Color { par("#ffffff", "#2a2d32") }
+pub fn COR_PAINEL() -> Color { par("#ffffff", "#312e2c") }
 #[allow(non_snake_case)]
-pub fn COR_PAINEL_FAIXA() -> Color { par("#f8f9fa", "#2d3035") }
+pub fn COR_PAINEL_FAIXA() -> Color { par("#f8f9fa", "#34312f") }
 #[allow(non_snake_case)]
-pub fn COR_BORDA() -> Color { par("#dadce0", "#3d4147") }
+pub fn COR_BORDA() -> Color { par("#dadce0", "#4a4542") }
 #[allow(non_snake_case)]
-pub fn COR_BORDA_SUAVE() -> Color { par("#e8eaed", "#33363b") }
+pub fn COR_BORDA_SUAVE() -> Color { par("#e8eaed", "#3e3a37") }
 /// Trilho e polegar da barra de rolagem padrão do Iced (`background.weak`/`.strong` dos
 /// temas Light/Dark dele), para ficar igual à versão Iced.
 #[allow(non_snake_case)]
@@ -101,9 +101,9 @@ pub fn COR_TRILHO_ROLAGEM() -> Color { par("#ededed", "#656666") }
 #[allow(non_snake_case)]
 pub fn COR_POLEGAR_ROLAGEM() -> Color { par("#cbcbcb", "#9a9a9b") }
 #[allow(non_snake_case)]
-pub fn COR_TEXTO() -> Color { par("#202124", "#e8eaed") }
+pub fn COR_TEXTO() -> Color { par("#202124", "#f0ece8") }
 #[allow(non_snake_case)]
-pub fn COR_TEXTO_MUTED() -> Color { par("#5f6368", "#9aa0a6") }
+pub fn COR_TEXTO_MUTED() -> Color { par("#5f6368", "#b3aca6") }
 #[allow(non_snake_case)]
 pub fn COR_AZUL_ACENTO() -> Color { hex(acento_hex()) }
 
@@ -122,13 +122,13 @@ pub fn COR_FOCO(fundo: Color) -> Color {
 #[allow(non_snake_case)]
 pub fn COR_AZUL_FUNDO() -> Color { mistura(COR_PAINEL(), COR_AZUL_ACENTO(), if escuro() { 0.22 } else { 0.10 }) }
 #[allow(non_snake_case)]
-pub fn COR_HOVER() -> Color { par("#dfe3e8", "#3a3e44") }
+pub fn COR_HOVER() -> Color { par("#dfe3e8", "#45403d") }
 #[allow(non_snake_case)]
 /// A barra de abas da faixa.
-pub fn COR_CROMO() -> Color { par("#f4f6f8", "#202327") }
+pub fn COR_CROMO() -> Color { par("#f4f6f8", "#2b2928") }
 #[allow(non_snake_case)]
 /// O corpo da faixa (onde ficam os grupos de botões).
-pub fn COR_CROMO_2() -> Color { par("#eaedf1", "#26292e") }
+pub fn COR_CROMO_2() -> Color { par("#eaedf1", "#2f2c2a") }
 /// Vermelho de erro (texto, borda de campo inválido, ícone de alerta). AA sobre `COR_PAINEL()`.
 #[allow(non_snake_case)]
 pub fn COR_ERRO() -> Color { par("#d93025", "#f28b82") }
@@ -141,7 +141,7 @@ pub fn COR_SOMBRA() -> Color { Color { a: 0.28, ..Color::BLACK } }
 #[allow(non_snake_case)]
 pub fn COR_HOVER_AZUL() -> Color { mistura(COR_PAINEL(), COR_AZUL_ACENTO(), if escuro() { 0.32 } else { 0.20 }) }
 #[allow(non_snake_case)]
-pub fn COR_MESA() -> Color { par("#e8eaed", "#2b2e33") }
+pub fn COR_MESA() -> Color { par("#e8eaed", "#2a2725") }
 
 /// Botão Pílula "Página inicial" no topo (arredondado com borda fina)
 pub fn estilo_pilha_inicio(_: &Theme, status: Status) -> Style {

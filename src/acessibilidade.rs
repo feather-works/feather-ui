@@ -141,7 +141,7 @@ mod testes {
             ("#d93025", "#f28b82"), ("#8e24aa", "#d7aefb"),
         ];
         for (claro, escuro) in cores {
-            for (acento, fundo) in [(claro, "#ffffff"), (escuro, "#2a2d32")] {
+            for (acento, fundo) in [(claro, "#ffffff"), (escuro, "#312e2c")] {
                 let bg = cor(fundo);
                 let c = texto_acento(cor(acento), bg);
                 assert!(contraste(c, bg) + 0.0001 >= CONTRASTE_TEXTO_AA,
